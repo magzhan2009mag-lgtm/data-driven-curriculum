@@ -5,12 +5,15 @@ import sys
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import func, insert, select
+from scipy.special import expit, logit
+from sqlalchemy import Engine, func, insert, inspect, select
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
 from app.models import (
     Base,
+    Item,
+    ItemResponse,
     School,
     SchoolClass,
     Student,
@@ -19,6 +22,7 @@ from app.models import (
     TestResult,
     Textbook,
     Topic,
+    TopicYearStat,
 )
 
 SEED = 42
@@ -57,6 +61,29 @@ TOPICS = (
 WEAK_B_TOPICS = {"Дроби", "Проценты"}
 STRONG_C_TOPICS = {"Геометрические фигуры", "Площадь и объём"}
 
+# Новые данные используют свои генераторы, чтобы не сдвигать последовательность основных баллов.
+ITEM_DIFFICULTY_SEED_OFFSET = 1
+ITEM_RESPONSE_SEED_OFFSET = 2
+PRETEST_SEED_OFFSET = 3
+ARCHIVE_SEED_OFFSET = 4
+
+ITEMS_PER_TEST = 8
+ITEM_DIFFICULTY_SD = 0.8
+# (тема, номер теста, номер задания): ответ на них не зависит от подготовки ученика.
+BAD_ITEMS = {("Дроби", 1, 3), ("Уравнения", 2, 5)}
+BAD_ITEM_PROBABILITY = 0.5
+
+PRETEST_BASE = 65
+PRETEST_NOISE_SD = 6
+
+ARCHIVE_YEARS = (2022, 2023, 2024, 2025)
+CURRENT_YEAR = 2026
+ARCHIVE_NOISE_SD = 1.0
+MIN_ARCHIVE_STUDENTS = 90
+MAX_ARCHIVE_STUDENTS = 110
+# Изменение среднего балла за год; у остальных тем тренда нет.
+YEARLY_TREND = {"Дроби": -1.5, "Геометрические фигуры": 1.2}
+
 
 def textbook_effect(textbook: str, topic: str) -> int:
     if textbook == "B":
@@ -66,9 +93,72 @@ def textbook_effect(textbook: str, topic: str) -> int:
     return 0
 
 
+def item_difficulties(seed: int = SEED) -> np.ndarray:
+    """Заложенные сложности заданий: строка — тест, столбец — задание, среднее по тесту 0."""
+    rng = np.random.default_rng(seed + ITEM_DIFFICULTY_SEED_OFFSET)
+    values = rng.normal(0, ITEM_DIFFICULTY_SD, (len(TOPICS) * TESTS_PER_TOPIC, ITEMS_PER_TEST))
+    return values - values.mean(axis=1, keepdims=True)
+
+
+def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) -> None:
+    """Создаёт задания и ответы так, чтобы доля верных ответов соответствовала баллу за тест."""
+    rng = np.random.default_rng(seed + ITEM_RESPONSE_SEED_OFFSET)
+    items = [[Item(test_id=test.id, number=n + 1) for n in range(ITEMS_PER_TEST)] for test in tests]
+    session.add_all([item for test_items in items for item in test_items])
+    session.flush()
+
+    item_ids = np.array([[item.id for item in test_items] for test_items in items])
+    is_bad = np.array(
+        [[(test.topic.name, test.number, n + 1) in BAD_ITEMS for n in range(ITEMS_PER_TEST)] for test in tests]
+    )
+    test_position = {test.id: position for position, test in enumerate(tests)}
+
+    results = pd.DataFrame(rows)
+    positions = results["test_id"].map(test_position).to_numpy()
+    # Крайние баллы ограничены: logit от 0 и 1 бесконечен.
+    ability = logit(results["score"].clip(3, 97).to_numpy() / 100)
+    probability = expit(ability[:, None] - item_difficulties(seed)[positions])
+    probability[is_bad[positions]] = BAD_ITEM_PROBABILITY
+    correct = rng.random(probability.shape) < probability
+
+    student_ids = np.repeat(results["student_id"].to_numpy(), ITEMS_PER_TEST)
+    responses = [
+        {"item_id": item_id, "student_id": student_id, "correct": is_correct}
+        for item_id, student_id, is_correct in zip(
+            item_ids[positions].ravel().tolist(), student_ids.tolist(), correct.ravel().tolist()
+        )
+    ]
+    session.execute(insert(ItemResponse), responses)
+
+
+def add_archive(session: Session, topics: list[Topic], rows: list[dict], student_school: dict[int, int], seed: int) -> None:
+    """Создаёт средние прошлых лет от текущего среднего школы по теме."""
+    rng = np.random.default_rng(seed + ARCHIVE_SEED_OFFSET)
+    names = {topic.id: topic.name for topic in topics}
+    results = pd.DataFrame(rows)
+    results["school_id"] = results["student_id"].map(student_school)
+
+    archive = []
+    for (school_id, topic_id), current in results.groupby(["school_id", "topic_id"])["score"].mean().items():
+        trend = YEARLY_TREND.get(names[topic_id], 0)
+        for year in ARCHIVE_YEARS:
+            value = current - trend * (CURRENT_YEAR - year) + rng.normal(0, ARCHIVE_NOISE_SD)
+            archive.append(
+                {
+                    "topic_id": int(topic_id),
+                    "school_id": int(school_id),
+                    "year": year,
+                    "avg_score": round(float(np.clip(value, 0, 100)), 1),
+                    "n_students": int(rng.integers(MIN_ARCHIVE_STUDENTS, MAX_ARCHIVE_STUDENTS + 1)),
+                }
+            )
+    session.execute(insert(TopicYearStat), archive)
+
+
 def generate(session: Session, seed: int = SEED) -> None:
     """Заполняет пустую БД. Один и тот же seed всегда даёт одни и те же данные."""
     rng = np.random.default_rng(seed)
+    pretest_rng = np.random.default_rng(seed + PRETEST_SEED_OFFSET)
 
     subject = Subject(name="Математика")
     textbooks = {key: Textbook(name=f"Учебник {key}", subject=subject) for key in TEXTBOOKS}
@@ -79,6 +169,7 @@ def generate(session: Session, seed: int = SEED) -> None:
 
     bases = {name: base for name, base, _ in TOPICS}
     rows = []
+    student_school = {}
     student_no = 0
 
     for school_index in range(SCHOOL_COUNT):
@@ -95,10 +186,16 @@ def generate(session: Session, seed: int = SEED) -> None:
 
             for _ in range(int(rng.integers(MIN_CLASS_SIZE, MAX_CLASS_SIZE + 1))):
                 student_no += 1
-                student = Student(name=f"Ученик {student_no:03d}", school_class=school_class)
+                student_effect = rng.normal(0, STUDENT_SD)
+                pretest = PRETEST_BASE + school_effect + student_effect + pretest_rng.normal(0, PRETEST_NOISE_SD)
+                student = Student(
+                    name=f"Ученик {student_no:03d}",
+                    school_class=school_class,
+                    pretest_score=int(np.clip(round(pretest), 0, 100)),
+                )
                 session.add(student)
                 session.flush()
-                student_effect = rng.normal(0, STUDENT_SD)
+                student_school[student.id] = school.id
 
                 for test in tests:
                     topic_name = test.topic.name
@@ -124,7 +221,21 @@ def generate(session: Session, seed: int = SEED) -> None:
                     )
 
     session.execute(insert(TestResult), rows)
+    add_items(session, tests, rows, seed)
+    add_archive(session, topics, rows, student_school, seed)
     session.commit()
+
+
+def is_outdated(target: Engine) -> bool:
+    """Проверяет, что в БД есть все таблицы и столбцы текущих моделей."""
+    inspector = inspect(target)
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            return True
+        existing = {column["name"] for column in inspector.get_columns(table.name)}
+        if set(table.columns.keys()) - existing:
+            return True
+    return False
 
 
 def load_summary(session: Session) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -178,9 +289,14 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Генерация синтетических данных")
     parser.add_argument("--reset", action="store_true", help="удалить данные и создать заново")
+    parser.add_argument("--if-outdated", action="store_true", help="пересоздать БД, только если её схема устарела")
     args = parser.parse_args()
 
-    if args.reset:
+    if args.if_outdated and not is_outdated(engine):
+        print("Демонстрационные данные актуальны.")
+        return 0
+
+    if args.reset or args.if_outdated:
         Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
 

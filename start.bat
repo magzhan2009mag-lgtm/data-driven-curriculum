@@ -38,17 +38,15 @@ if errorlevel 1 (
   copy /y backend\requirements.txt backend\.venv\requirements.installed >nul
 )
 
-if not exist backend\data.db (
-  echo Создаю демонстрационные данные...
-  pushd backend
-  .venv\Scripts\python.exe -m scripts.seed
-  if errorlevel 1 (
-    popd
-    set "MESSAGE=Не удалось создать демонстрационные данные."
-    goto :fail
-  )
+echo Проверяю демонстрационные данные...
+pushd backend
+.venv\Scripts\python.exe -m scripts.seed --if-outdated
+if errorlevel 1 (
   popd
+  set "MESSAGE=Не удалось создать демонстрационные данные."
+  goto :fail
 )
+popd
 
 if not exist frontend\node_modules (
   echo Устанавливаю зависимости интерфейса, это может занять несколько минут...

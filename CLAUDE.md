@@ -41,8 +41,10 @@ EdTech-платформа для методистов, которая:
 - backend/tests/ — тесты
 
 ## Сущности
-School, Class, Student, Textbook, Subject,
-Topic(hours_planned), Test, TestResult(student, topic, textbook, score)
+School, Class, Student(pretest_score), Textbook, Subject,
+Topic(hours_planned), Test, TestResult(student, topic, textbook, score),
+Item(test, number), ItemResponse(item, student, correct),
+TopicYearStat(topic, school, year, avg_score, n_students)
 
 ## API
 - GET /topics/difficulty — сложность тем

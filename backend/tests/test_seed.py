@@ -1,9 +1,23 @@
+import numpy as np
+import pandas as pd
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Base, School, SchoolClass, TestResult, Textbook, Topic
-from scripts.seed import generate, load_summary
+from app.models import (
+    Base,
+    Item,
+    ItemResponse,
+    School,
+    SchoolClass,
+    Student,
+    Test,
+    TestResult,
+    Textbook,
+    Topic,
+    TopicYearStat,
+)
+from scripts.seed import ARCHIVE_YEARS, ITEMS_PER_TEST, generate, is_outdated, load_summary
 
 
 def seeded_session(path) -> Session:
@@ -36,9 +50,74 @@ def test_result_count_is_in_expected_range(session):
     assert 11_000 <= count <= 13_000
 
 
+def extra_data(db: Session) -> list[list[tuple]]:
+    queries = [
+        select(Student.id, Student.pretest_score).order_by(Student.id),
+        select(ItemResponse.item_id, ItemResponse.student_id, ItemResponse.correct).order_by(ItemResponse.id),
+        select(TopicYearStat.topic_id, TopicYearStat.school_id, TopicYearStat.year, TopicYearStat.avg_score)
+        .order_by(TopicYearStat.id),
+    ]
+    return [[tuple(row) for row in db.execute(query)] for query in queries]
+
+
 def test_same_seed_gives_identical_data(session, tmp_path):
     with seeded_session(tmp_path / "again.db") as again:
         assert all_results(session) == all_results(again)
+        assert extra_data(session) == extra_data(again)
+
+
+def test_every_test_has_all_items(session):
+    tests = session.scalar(select(func.count()).select_from(Test))
+    assert session.scalar(select(func.count()).select_from(Item)) == tests * ITEMS_PER_TEST
+
+
+def test_every_result_has_item_responses(session):
+    results = session.scalar(select(func.count()).select_from(TestResult))
+    assert session.scalar(select(func.count()).select_from(ItemResponse)) == results * ITEMS_PER_TEST
+
+
+def test_item_answers_agree_with_score(session):
+    answers = pd.DataFrame(
+        session.execute(
+            select(Item.test_id, ItemResponse.student_id, ItemResponse.correct)
+            .join(Item, ItemResponse.item_id == Item.id)
+        ).mappings().all()
+    )
+    correct = answers.groupby(["test_id", "student_id"])["correct"].mean().rename("correct").reset_index()
+    scores = pd.DataFrame(session.execute(select(TestResult.test_id, TestResult.student_id, TestResult.score)).mappings().all())
+    merged = correct.merge(scores, on=["test_id", "student_id"])
+    assert np.corrcoef(merged["correct"], merged["score"])[0, 1] > 0.6
+    assert merged["correct"].mean() * 100 == pytest.approx(merged["score"].mean(), abs=5)
+
+
+def test_pretest_is_within_bounds_and_predicts_scores(session):
+    frame = pd.DataFrame(
+        session.execute(
+            select(Student.id, Student.pretest_score, func.avg(TestResult.score).label("average"))
+            .join(TestResult, TestResult.student_id == Student.id)
+            .group_by(Student.id)
+        ).mappings().all()
+    )
+    assert frame["pretest_score"].between(0, 100).all()
+    assert np.corrcoef(frame["pretest_score"], frame["average"])[0, 1] > 0.7
+
+
+def test_archive_covers_every_school_topic_and_year(session):
+    expected = 5 * 12 * len(ARCHIVE_YEARS)
+    assert session.scalar(select(func.count()).select_from(TopicYearStat)) == expected
+
+
+def test_old_schema_is_outdated(tmp_path):
+    engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    assert is_outdated(engine) is False
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE students DROP COLUMN pretest_score"))
+    assert is_outdated(engine) is True
+
+
+def test_empty_database_is_outdated(tmp_path):
+    assert is_outdated(create_engine(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")) is True
 
 
 def test_scores_are_within_bounds(session):

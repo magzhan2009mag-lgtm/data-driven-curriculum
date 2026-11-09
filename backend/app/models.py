@@ -54,6 +54,7 @@ class Student(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     class_id: Mapped[int] = mapped_column(ForeignKey("classes.id"), index=True)
     name: Mapped[str]
+    pretest_score: Mapped[int]
 
     school_class: Mapped[SchoolClass] = relationship(back_populates="students")
 
@@ -94,3 +95,36 @@ class TestResult(Base):
     topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), index=True)
     textbook_id: Mapped[int] = mapped_column(ForeignKey("textbooks.id"), index=True)
     score: Mapped[int]
+
+
+class Item(Base):
+    __tablename__ = "items"
+    __table_args__ = (UniqueConstraint("test_id", "number"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), index=True)
+    number: Mapped[int]
+
+
+class ItemResponse(Base):
+    __tablename__ = "item_responses"
+    __table_args__ = (UniqueConstraint("item_id", "student_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    correct: Mapped[bool]
+
+
+class TopicYearStat(Base):
+    """Архив прошлых лет: только средние по школе и теме."""
+
+    __tablename__ = "topic_year_stats"
+    __table_args__ = (UniqueConstraint("topic_id", "school_id", "year"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), index=True)
+    school_id: Mapped[int] = mapped_column(ForeignKey("schools.id"), index=True)
+    year: Mapped[int]
+    avg_score: Mapped[float]
+    n_students: Mapped[int]
