@@ -29,7 +29,9 @@ def score_distribution(scores: pd.Series) -> list[dict]:
     for number in range(BIN_COUNT):
         low = number * BIN_WIDTH
         high = 100 if number == BIN_COUNT - 1 else low + BIN_WIDTH - 1
-        result.append({"range": f"{low}–{high}", "count": int(counts.get(number, 0))})
+        result.append(
+            {"range": f"{low}–{high}", "count": int(counts.get(number, 0)), "failing": high < FAIL_THRESHOLD}
+        )
     return result
 
 

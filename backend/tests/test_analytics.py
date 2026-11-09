@@ -61,8 +61,9 @@ def test_topic_difficulty_counts_fail_rate_below_50():
 def test_score_distribution_includes_100_in_last_bin():
     distribution = topic_difficulty(rows([100, 90, 0]))[0]["score_distribution"]
     assert len(distribution) == 10
-    assert distribution[-1] == {"range": "90–100", "count": 2}
-    assert distribution[0] == {"range": "0–9", "count": 1}
+    assert distribution[-1] == {"range": "90–100", "count": 2, "failing": False}
+    assert distribution[0] == {"range": "0–9", "count": 1, "failing": True}
+    assert [row["failing"] for row in distribution].count(True) == 5
 
 
 def test_seed_hard_topics(results):
@@ -129,6 +130,7 @@ def test_comparison_without_topic_covers_all_topics(results):
 def test_hours_sum_is_preserved_on_seed(results):
     recommendations = recommend_hours(topic_difficulty(results))
     assert recommendations["total_hours"] == 84
+    assert recommendations["hours_moved"] == 6
     assert sum(item["hours_recommended"] for item in recommendations["items"]) == 84
     assert sum(item["delta"] for item in recommendations["items"]) == 0
 

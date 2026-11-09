@@ -57,9 +57,10 @@ def student_z_scores(results: pd.DataFrame) -> pd.DataFrame:
 
 
 def format_p(p_value: float) -> str:
+    # Неразрывные пробелы: при переносе строки «p < 0,001» не должно разрываться.
     if p_value < 0.001:
-        return "p < 0,001"
-    return f"p = {p_value:.3f}".replace(".", ",")
+        return "p < 0,001"
+    return f"p = {p_value:.3f}".replace(".", ",")
 
 
 def build_conclusion(subject: str, textbooks: list[dict], comparisons: list[dict]) -> str:

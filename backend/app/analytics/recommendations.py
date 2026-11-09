@@ -69,6 +69,7 @@ def recommend_hours(topics: list[dict]) -> dict:
     deltas = redistribute(topics)
     return {
         "total_hours": sum(topic["hours_planned"] for topic in topics),
+        "hours_moved": sum(delta for delta in deltas.values() if delta > 0),
         "items": [
             {
                 "topic_id": topic["topic_id"],
