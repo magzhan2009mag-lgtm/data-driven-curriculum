@@ -27,6 +27,8 @@ def rows(scores, topic_id=1, topic="Тема", textbook="Учебник A", text
                 "textbook": textbook,
                 "school_id": 1,
                 "school": "Школа №1",
+                "class_id": 1,
+                "class": "6А",
                 "score": score,
             }
             for offset, score in enumerate(scores)

@@ -13,6 +13,8 @@ RESULT_COLUMNS = [
     "textbook",
     "school_id",
     "school",
+    "class_id",
+    "class",
     "score",
 ]
 
@@ -29,6 +31,8 @@ def load_results(session: Session) -> pd.DataFrame:
             Textbook.name.label("textbook"),
             School.id.label("school_id"),
             School.name.label("school"),
+            SchoolClass.id.label("class_id"),
+            SchoolClass.name.label("class"),
             TestResult.score,
         )
         .join(Topic, TestResult.topic_id == Topic.id)

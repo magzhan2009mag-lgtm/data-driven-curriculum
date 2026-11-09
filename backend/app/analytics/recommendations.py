@@ -1,5 +1,7 @@
 """Рекомендации по часам. Правила описаны в скилле metrics."""
 
+from scipy.optimize import linprog
+
 MIN_HOURS = 1
 
 
@@ -47,6 +49,32 @@ def redistribute(topics: list[dict]) -> dict[int, int]:
         deltas[donor["topic_id"]] -= 1
 
 
+def optimize(topics: list[dict]) -> dict[int, int]:
+    """Находит перенос часов с максимальной суммой difficulty_index × изменение часов."""
+    if not topics:
+        return {}
+
+    bounds = []
+    for topic in topics:
+        limit = change_limit(topic["hours_planned"])
+        if topic["level"] == "hard":
+            bounds.append((0, limit))
+        elif topic["level"] == "easy":
+            bounds.append((-min(limit, topic["hours_planned"] - MIN_HOURS), 0))
+        else:
+            bounds.append((0, 0))
+
+    solution = linprog(
+        c=[-topic["difficulty_index"] for topic in topics],
+        A_eq=[[1] * len(topics)],
+        b_eq=[0],
+        bounds=bounds,
+        method="highs-ds",
+    )
+    # Границы целые, а ограничение одно с единичными коэффициентами: вершина решения всегда целая.
+    return {topic["topic_id"]: round(delta) for topic, delta in zip(topics, solution.x)}
+
+
 def build_reason(topic: dict, delta: int) -> str:
     current = topic["hours_planned"]
     target = current + delta
@@ -66,7 +94,15 @@ def build_reason(topic: dict, delta: int) -> str:
 
 def recommend_hours(topics: list[dict]) -> dict:
     """Принимает результат topic_difficulty и возвращает рекомендации в том же порядке."""
-    deltas = redistribute(topics)
+    return build_response(topics, redistribute(topics))
+
+
+def recommend_optimal_hours(topics: list[dict]) -> dict:
+    """То же, что recommend_hours, но перенос часов находит линейное программирование."""
+    return {**build_response(topics, optimize(topics)), "method": "linprog"}
+
+
+def build_response(topics: list[dict], deltas: dict[int, int]) -> dict:
     return {
         "total_hours": sum(topic["hours_planned"] for topic in topics),
         "hours_moved": sum(delta for delta in deltas.values() if delta > 0),
