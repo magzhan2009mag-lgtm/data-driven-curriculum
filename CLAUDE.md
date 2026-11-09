@@ -50,6 +50,7 @@ Topic(hours_planned), Test, TestResult(student, topic, textbook, score)
 - GET /recommendations — рекомендации по часам
 
 ## Команды
+- запуск всего: двойной клик по start.bat
 - backend: `cd backend && pip install -r requirements.txt`
 - данные: `cd backend && python -m scripts.seed --reset`
 - сервер: `cd backend && uvicorn app.main:app --reload` (порт 8000)
