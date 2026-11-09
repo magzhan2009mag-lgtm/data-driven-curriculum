@@ -69,6 +69,8 @@ ARCHIVE_SEED_OFFSET = 4
 
 ITEMS_PER_TEST = 8
 ITEM_DIFFICULTY_SD = 0.8
+# Баллы разбросаны узко, и без усиления даже хорошие задания плохо различали бы учеников.
+ITEM_DISCRIMINATION = 2.0
 # (тема, номер теста, номер задания): ответ на них не зависит от подготовки ученика.
 BAD_ITEMS = {("Дроби", 1, 3), ("Уравнения", 2, 5)}
 BAD_ITEM_PROBABILITY = 0.5
@@ -117,6 +119,9 @@ def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) 
     positions = results["test_id"].map(test_position).to_numpy()
     # Крайние баллы ограничены: logit от 0 и 1 бесконечен.
     ability = logit(results["score"].clip(3, 97).to_numpy() / 100)
+    # Усиливаем отличия внутри теста, сохраняя его средний уровень.
+    test_mean = pd.Series(ability).groupby(positions).transform("mean").to_numpy()
+    ability = test_mean + ITEM_DISCRIMINATION * (ability - test_mean)
     probability = expit(ability[:, None] - item_difficulties(seed)[positions])
     probability[is_bad[positions]] = BAD_ITEM_PROBABILITY
     correct = rng.random(probability.shape) < probability

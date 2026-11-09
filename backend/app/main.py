@@ -5,13 +5,16 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
 from app.analytics.clusters import cluster_schools, cluster_topics
-from app.analytics.data import load_results
+from app.analytics.data import load_item_responses, load_results, load_students, load_year_stats
 from app.analytics.difficulty import topic_difficulty
 from app.analytics.hours_effect import hours_effect
+from app.analytics.items import item_quality
+from app.analytics.matching import match_textbooks
 from app.analytics.outliers import class_outliers
 from app.analytics.recommendations import recommend_hours, recommend_optimal_hours
 from app.analytics.regression import textbook_regression
 from app.analytics.textbooks import compare_textbooks
+from app.analytics.trends import topic_trends
 from app.database import SessionLocal
 
 app = FastAPI(title="Data-Driven Curriculum API")
@@ -70,3 +73,23 @@ def get_clusters(db: Session = Depends(get_db)) -> dict:
 @app.get("/classes/outliers")
 def get_class_outliers(db: Session = Depends(get_db)) -> dict:
     return class_outliers(load_results(db))
+
+
+@app.get("/items/quality")
+def get_items_quality(topic_id: int, db: Session = Depends(get_db)) -> dict:
+    responses = load_item_responses(db, topic_id)
+    if responses.empty:
+        raise HTTPException(status_code=404, detail="Тема не найдена")
+    return item_quality(responses, topic_id)
+
+
+@app.get("/topics/trends")
+def get_topics_trends(db: Session = Depends(get_db)) -> list[dict]:
+    return topic_trends(load_results(db), load_year_stats(db))
+
+
+@app.get("/textbooks/matching")
+def get_textbooks_matching(topic_id: int | None = None, db: Session = Depends(get_db)) -> dict:
+    results = load_results(db)
+    require_topic(results, topic_id)
+    return match_textbooks(results, load_students(db), topic_id)
