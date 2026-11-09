@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.analytics.clusters import cluster_schools, cluster_topics
 from app.analytics.data import load_item_responses, load_results, load_students, load_year_stats
 from app.analytics.difficulty import topic_difficulty
+from app.analytics.explain import explain_recommendations
 from app.analytics.hours_effect import hours_effect
 from app.analytics.items import item_quality
 from app.analytics.matching import match_textbooks
@@ -57,6 +58,11 @@ def get_recommendations(db: Session = Depends(get_db)) -> dict:
 @app.get("/recommendations/optimal")
 def get_recommendations_optimal(db: Session = Depends(get_db)) -> dict:
     return recommend_optimal_hours(topic_difficulty(load_results(db)))
+
+
+@app.get("/recommendations/explanation")
+def get_recommendations_explanation(db: Session = Depends(get_db)) -> dict:
+    return explain_recommendations(recommend_hours(topic_difficulty(load_results(db))))
 
 
 @app.get("/hours/effect")
