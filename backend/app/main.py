@@ -4,9 +4,11 @@ import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
+from app.analytics.clusters import cluster_schools, cluster_topics
 from app.analytics.data import load_results
 from app.analytics.difficulty import topic_difficulty
 from app.analytics.hours_effect import hours_effect
+from app.analytics.outliers import class_outliers
 from app.analytics.recommendations import recommend_hours, recommend_optimal_hours
 from app.analytics.regression import textbook_regression
 from app.analytics.textbooks import compare_textbooks
@@ -57,3 +59,14 @@ def get_recommendations_optimal(db: Session = Depends(get_db)) -> dict:
 @app.get("/hours/effect")
 def get_hours_effect(db: Session = Depends(get_db)) -> dict:
     return hours_effect(topic_difficulty(load_results(db)))
+
+
+@app.get("/clusters")
+def get_clusters(db: Session = Depends(get_db)) -> dict:
+    results = load_results(db)
+    return {"topics": cluster_topics(topic_difficulty(results)), "schools": cluster_schools(results)}
+
+
+@app.get("/classes/outliers")
+def get_class_outliers(db: Session = Depends(get_db)) -> dict:
+    return class_outliers(load_results(db))
