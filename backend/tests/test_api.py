@@ -28,8 +28,8 @@ def topic_id_of(topics: list[dict], name: str) -> int:
 def test_difficulty_format(topics):
     assert len(topics) == 12
     assert set(topics[0]) == {
-        "topic_id", "topic", "hours_planned", "avg_score", "fail_rate",
-        "difficulty_index", "level", "by_school", "score_distribution",
+        "topic_id", "topic", "hours_planned", "avg_score", "median_score", "std_score", "fail_rate",
+        "difficulty_index", "difficulty_z", "is_anomalous", "level", "by_school", "score_distribution",
     }
     assert set(topics[0]["by_school"][0]) == {"school_id", "school", "avg_score"}
     assert len(topics[0]["by_school"]) == 5
@@ -50,6 +50,7 @@ def test_compare_format(client, topics):
     assert len(body["comparisons"]) == 3
     assert set(body["comparisons"][0]) == {
         "a", "b", "p_value", "p_adjusted", "cohens_d", "effect", "significant",
+        "mann_whitney_p", "mann_whitney_p_adjusted", "ci_low", "ci_high",
     }
     assert body["conclusion"].startswith("Тема «Дроби»")
     assert body["limitation"]

@@ -5,6 +5,7 @@ import pandas as pd
 FAIL_THRESHOLD = 50
 HARD_FROM = 0.40
 MEDIUM_FROM = 0.25
+ANOMALY_Z = 2
 BIN_WIDTH = 10
 BIN_COUNT = 10
 
@@ -35,6 +36,17 @@ def score_distribution(scores: pd.Series) -> list[dict]:
     return result
 
 
+def add_anomaly_flags(items: list[dict]) -> None:
+    """Отмечает темы, индекс сложности которых аномально выше, чем у остальных."""
+    indexes = pd.Series([item["difficulty_index"] for item in items], dtype=float)
+    spread = indexes.std()
+    # Одна тема или одинаковые индексы: сравнивать не с чем, std равно NaN или 0.
+    z_scores = (indexes - indexes.mean()) / spread if spread > 0 else indexes * 0
+    for item, z_score in zip(items, z_scores):
+        item["difficulty_z"] = round(float(z_score), 2)
+        item["is_anomalous"] = bool(z_score >= ANOMALY_Z)
+
+
 def topic_difficulty(results: pd.DataFrame) -> list[dict]:
     """Возвращает темы от самой сложной к самой лёгкой."""
     items = []
@@ -49,6 +61,9 @@ def topic_difficulty(results: pd.DataFrame) -> list[dict]:
                 "topic": topic,
                 "hours_planned": int(hours),
                 "avg_score": round(avg_score, 1),
+                "median_score": round(float(group["score"].median()), 1),
+                # У единственного результата разброса нет, а std вернул бы NaN.
+                "std_score": round(float(group["score"].std()), 1) if len(group) > 1 else 0.0,
                 "fail_rate": round(fail_rate, 3),
                 "difficulty_index": round(index, 3),
                 "level": difficulty_level(index),
@@ -59,4 +74,5 @@ def topic_difficulty(results: pd.DataFrame) -> list[dict]:
                 "score_distribution": score_distribution(group["score"]),
             }
         )
+    add_anomaly_flags(items)
     return sorted(items, key=lambda item: (-item["difficulty_index"], item["topic_id"]))

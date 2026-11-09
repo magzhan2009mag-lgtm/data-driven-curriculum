@@ -8,6 +8,8 @@ from scipy import stats
 
 ALPHA = 0.05
 MIN_STUDENTS = 30
+BOOTSTRAP_REPEATS = 2000
+BOOTSTRAP_SEED = 42
 NOT_ENOUGH_DATA = "мало данных"
 LIMITATION = (
     "Тест не учитывает, что ученики сгруппированы по классам, поэтому значимость может быть "
@@ -31,6 +33,21 @@ def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
     if pooled_variance == 0:
         return 0.0
     return float((a.mean() - b.mean()) / np.sqrt(pooled_variance))
+
+
+def bootstrap_ci(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
+    """95% доверительный интервал для разницы средних a − b."""
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    means_a = rng.choice(a, size=(BOOTSTRAP_REPEATS, len(a))).mean(axis=1)
+    means_b = rng.choice(b, size=(BOOTSTRAP_REPEATS, len(b))).mean(axis=1)
+    low, high = np.percentile(means_a - means_b, [2.5, 97.5])
+    return float(low), float(high)
+
+
+def mann_whitney_p(a: np.ndarray, b: np.ndarray) -> float:
+    p_value = float(stats.mannwhitneyu(a, b, alternative="two-sided").pvalue)
+    # Если все значения равны, тест возвращает NaN: различий увидеть нельзя.
+    return 1.0 if np.isnan(p_value) else p_value
 
 
 def effect_label(d: float) -> str:
@@ -114,19 +131,24 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
     for a, b in combinations(sorted(z_by_book), 2):
         enough = len(z_by_book[a]) >= MIN_STUDENTS and len(z_by_book[b]) >= MIN_STUDENTS
         pair = {"a": a, "b": b, "p_value": None, "p_adjusted": None, "cohens_d": None,
-                "effect": NOT_ENOUGH_DATA, "significant": False}
+                "effect": NOT_ENOUGH_DATA, "significant": False,
+                "mann_whitney_p": None, "mann_whitney_p_adjusted": None, "ci_low": None, "ci_high": None}
         if enough:
             p_value = float(stats.ttest_ind(z_by_book[a], z_by_book[b], equal_var=False).pvalue)
             # Без разброса в обеих группах тест возвращает NaN: различий увидеть нельзя.
             pair["p_value"] = 1.0 if np.isnan(p_value) else p_value
             pair["cohens_d"] = cohens_d(z_by_book[a], z_by_book[b])
             pair["effect"] = effect_label(pair["cohens_d"])
+            pair["mann_whitney_p"] = mann_whitney_p(z_by_book[a], z_by_book[b])
+            pair["ci_low"], pair["ci_high"] = bootstrap_ci(z_by_book[a], z_by_book[b])
         comparisons.append(pair)
 
     tested = [pair for pair in comparisons if pair["p_value"] is not None]
     for pair, adjusted in zip(tested, holm_adjust([pair["p_value"] for pair in tested])):
         pair["p_adjusted"] = adjusted
         pair["significant"] = adjusted < ALPHA
+    for pair, adjusted in zip(tested, holm_adjust([pair["mann_whitney_p"] for pair in tested])):
+        pair["mann_whitney_p_adjusted"] = adjusted
 
     subject = f"Тема «{topic}»" if topic else "Все темы"
     conclusion = build_conclusion(subject, textbooks, comparisons)
@@ -135,6 +157,10 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
         pair["p_value"] = round(pair["p_value"], 4)
         pair["p_adjusted"] = round(pair["p_adjusted"], 4)
         pair["cohens_d"] = round(pair["cohens_d"], 2)
+        pair["mann_whitney_p"] = round(pair["mann_whitney_p"], 4)
+        pair["mann_whitney_p_adjusted"] = round(pair["mann_whitney_p_adjusted"], 4)
+        pair["ci_low"] = round(pair["ci_low"], 3)
+        pair["ci_high"] = round(pair["ci_high"], 3)
 
     return {
         "topic_id": topic_id,

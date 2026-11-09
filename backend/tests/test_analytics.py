@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.analytics.data import RESULT_COLUMNS, load_results
 from app.analytics.difficulty import compute_index, difficulty_level, topic_difficulty
 from app.analytics.recommendations import change_limit, hours_word, recommend_hours
-from app.analytics.textbooks import MIN_STUDENTS, compare_textbooks, effect_label, holm_adjust
+from app.analytics.textbooks import MIN_STUDENTS, bootstrap_ci, compare_textbooks, effect_label, holm_adjust
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +66,45 @@ def test_score_distribution_includes_100_in_last_bin():
     assert [row["failing"] for row in distribution].count(True) == 5
 
 
+def test_descriptive_statistics():
+    item = topic_difficulty(rows([40, 50, 60, 90]))[0]
+    assert item["median_score"] == 55.0
+    assert item["std_score"] == pytest.approx(21.6, abs=0.05)
+
+
+def test_single_result_has_zero_spread():
+    item = topic_difficulty(rows([70]))[0]
+    assert item["std_score"] == 0.0
+    assert item["difficulty_z"] == 0.0
+    assert item["is_anomalous"] is False
+
+
+def test_anomalous_topic_is_flagged():
+    easy = [rows([90, 92], topic_id=i, topic=f"Тема {i}") for i in range(1, 12)]
+    hard = rows([10, 12], topic_id=12, topic="Провальная")
+    items = topic_difficulty(pd.concat([*easy, hard]))
+    assert items[0]["topic"] == "Провальная" and items[0]["is_anomalous"] is True
+    assert not any(item["is_anomalous"] for item in items[1:])
+
+
+def test_bootstrap_interval_contains_difference_and_repeats():
+    rng = np.random.default_rng(1)
+    a, b = rng.normal(1, 1, 200), rng.normal(0, 1, 200)
+    low, high = bootstrap_ci(a, b)
+    assert low < a.mean() - b.mean() < high
+    assert 0 < low
+    assert (low, high) == bootstrap_ci(a, b)
+
+
+def test_mann_whitney_is_reported_but_welch_decides(results):
+    topic_id = int(results.loc[results["topic"] == "Дроби", "topic_id"].iloc[0])
+    pairs = compare_textbooks(results, topic_id)["comparisons"]
+    pair = next(p for p in pairs if {p["a"], p["b"]} == {"Учебник A", "Учебник B"})
+    assert pair["mann_whitney_p_adjusted"] < 0.05
+    assert pair["mann_whitney_p_adjusted"] >= pair["mann_whitney_p"]
+    assert pair["ci_low"] > 0
+
+
 def test_seed_hard_topics(results):
     hard = {item["topic"] for item in topic_difficulty(results) if item["level"] == "hard"}
     assert hard == {"Дроби", "Проценты", "Уравнения"}
@@ -110,6 +149,7 @@ def test_equal_scores_do_not_break_comparison():
     pair = compare_textbooks(data)["comparisons"][0]
     assert pair["significant"] is False
     assert pair["cohens_d"] == 0
+    assert pair["mann_whitney_p"] == 1.0
 
 
 def test_textbook_b_is_worse_on_fractions(results):
