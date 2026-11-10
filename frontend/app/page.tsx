@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { OutlierNotice } from "@/components/outlier-notice";
+import { RootCauses } from "@/components/root-causes";
 import { ScoreHeatmap } from "@/components/score-heatmap";
 import { TrendsList } from "@/components/trends-list";
-import { getOutliers, getTopics, getTrends } from "@/lib/api";
+import { getOutliers, getPrerequisites, getTopics, getTrends } from "@/lib/api";
 import { formatPercent, formatScore } from "@/lib/format";
 
 export default async function HomePage() {
-  const [topics, trends, outliers] = await Promise.all([getTopics(), getTrends(), getOutliers()]);
+  const [topics, trends, outliers, prerequisites] = await Promise.all([
+    getTopics(),
+    getTrends(),
+    getOutliers(),
+    getPrerequisites(),
+  ]);
   if (topics.length === 0) return <EmptyState />;
 
   const hardest = topics[0];
@@ -50,6 +56,7 @@ export default async function HomePage() {
         )}
       </section>
 
+      <RootCauses data={prerequisites} />
       <ScoreHeatmap topics={topics} />
       <TrendsList trends={trends} />
       <OutlierNotice data={outliers} />

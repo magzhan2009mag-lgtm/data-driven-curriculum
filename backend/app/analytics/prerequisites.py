@@ -112,17 +112,16 @@ def link_text(base: str, target: str, points: float) -> str:
 
 
 def root_text(topic: str, level: str, dependents: list[dict]) -> str:
+    """«Тема «Проценты» сложная, но корень — тема «Дроби»: пробелы в ней переходят в …»."""
     hard = [item["topic"] for item in dependents if item["level"] == "hard"]
-    others = [item["topic"] for item in dependents if item["level"] != "hard"]
-    if len(hard) == 1:
-        text = f"Корень проблемы — тема «{topic}»: от неё зависит сложная тема {quoted(hard)}"
-    else:
-        text = f"Корень проблемы — тема «{topic}»: от неё зависят сложные темы {quoted(hard)}"
-    if others:
-        text += f", а также {quoted(others)}"
+    problem = f"Тема {quoted(hard)} сложная" if len(hard) == 1 else f"Темы {quoted(hard)} сложные"
+    text = (
+        f"{problem}, но корень — тема «{topic}»: пробелы в ней переходят в "
+        f"{quoted([item['topic'] for item in dependents])}."
+    )
     if level == "hard":
-        return text + ". Пробелы в этой теме переходят в следующие."
-    return text + ". Сама тема средней сложности, но пробелы в ней переходят в следующие."
+        return f"{text} Сама тема «{topic}» тоже сложная."
+    return f"{text} Сама она средней сложности, и по её баллам проблему легко не заметить."
 
 
 def find_roots(links: list[dict], levels: dict[int, str]) -> list[dict]:

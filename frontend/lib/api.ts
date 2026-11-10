@@ -117,6 +117,34 @@ export type Outliers = {
   conclusion: string;
 };
 
+export type PrerequisiteLink = {
+  from_topic_id: number;
+  from_topic: string;
+  to_topic_id: number;
+  to_topic: string;
+  coef: number;
+  std_coef: number;
+  p_value: number;
+  p_adjusted: number;
+  points: number;
+  text: string;
+};
+
+export type Prerequisites = {
+  topics: { topic_id: number; topic: string; level: Level }[];
+  links: PrerequisiteLink[];
+  roots: {
+    topic_id: number;
+    topic: string;
+    level: Level;
+    dependents: { topic_id: number; topic: string; level: Level }[];
+    text: string;
+  }[];
+  n_students: number;
+  conclusion: string;
+  note: string;
+};
+
 export type Regression = {
   topic_id: number | null;
   reference: string | null;
@@ -154,6 +182,10 @@ export function getItemQuality(topicId: number): Promise<ItemQuality | null> {
 
 export function getOutliers(): Promise<Outliers | null> {
   return request<Outliers>("/classes/outliers");
+}
+
+export function getPrerequisites(): Promise<Prerequisites | null> {
+  return request<Prerequisites>("/topics/prerequisites");
 }
 
 export function getRegression(topicId?: number): Promise<Regression | null> {

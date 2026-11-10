@@ -64,7 +64,11 @@ def test_seed_roots_are_fractions_and_negative_numbers(prerequisites):
     assert set(roots) == {"Дроби", "Отрицательные числа"}
     assert roots["Отрицательные числа"]["level"] == "medium"
     assert {item["topic"] for item in roots["Дроби"]["dependents"]} == {"Проценты", "Десятичные дроби"}
-    assert "сложная тема «Проценты»" in roots["Дроби"]["text"]
+    assert roots["Дроби"]["text"] == (
+        "Тема «Проценты» сложная, но корень — тема «Дроби»: пробелы в ней переходят в «Десятичные дроби» "
+        "и «Проценты». Сама тема «Дроби» тоже сложная."
+    )
+    assert "Сама она средней сложности" in roots["Отрицательные числа"]["text"]
 
 
 def test_no_links_without_dependencies(independent_engine):

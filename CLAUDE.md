@@ -55,6 +55,7 @@ TopicYearStat(topic, school, year, avg_score, n_students)
 - GET /textbooks/regression?topic_id= — вклад учебника с контролем школы и темы
 - GET /textbooks/matching?topic_id= — PSM по входному тесту и школе
 - GET /topics/trends — изменение результатов по годам
+- GET /topics/prerequisites — связи «ранняя тема → поздняя» и корни проблемы (корень получает +1 час в рекомендациях)
 - GET /items/quality?topic_id= — point-biserial и модель Раша
 - GET /hours/effect — связь часов и результата
 - GET /clusters — группы похожих тем и школ

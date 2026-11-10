@@ -3,14 +3,20 @@ import { notFound } from "next/navigation";
 import { ItemIssues } from "@/components/item-issues";
 import { LevelMark } from "@/components/level-mark";
 import { ScoreDistribution } from "@/components/score-distribution";
+import { TopicLinks } from "@/components/topic-links";
 import { TrendSparkline } from "@/components/trend-sparkline";
-import { getItemQuality, getRecommendations, getTopics, getTrends } from "@/lib/api";
+import { getItemQuality, getPrerequisites, getRecommendations, getTopics, getTrends } from "@/lib/api";
 import { formatHours, formatIndex, formatPercent, formatScore, scoreBandClass } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default async function TopicPage({ params }: PageProps<"/topics/[id]">) {
   const { id } = await params;
-  const [topics, recommendations, trends] = await Promise.all([getTopics(), getRecommendations(), getTrends()]);
+  const [topics, recommendations, trends, prerequisites] = await Promise.all([
+    getTopics(),
+    getRecommendations(),
+    getTrends(),
+    getPrerequisites(),
+  ]);
   const topic = topics.find((item) => String(item.topic_id) === id);
   if (!topic) notFound();
   const recommendation = recommendations.items.find((item) => item.topic_id === topic.topic_id);
@@ -79,6 +85,8 @@ export default async function TopicPage({ params }: PageProps<"/topics/[id]">) {
           </Link>
         </section>
       )}
+
+      <TopicLinks data={prerequisites} topicId={topic.topic_id} />
 
       {trend && trend.direction !== "без заметных изменений" && (
         <section aria-labelledby="trend-title" className="flex flex-wrap items-center gap-x-6 gap-y-2">
