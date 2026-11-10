@@ -1,17 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ItemIssues } from "@/components/item-issues";
 import { LevelMark } from "@/components/level-mark";
 import { ScoreDistribution } from "@/components/score-distribution";
-import { getRecommendations, getTopics } from "@/lib/api";
+import { TrendSparkline } from "@/components/trend-sparkline";
+import { getItemQuality, getRecommendations, getTopics, getTrends } from "@/lib/api";
 import { formatHours, formatIndex, formatPercent, formatScore, scoreBandClass } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default async function TopicPage({ params }: PageProps<"/topics/[id]">) {
   const { id } = await params;
-  const [topics, recommendations] = await Promise.all([getTopics(), getRecommendations()]);
+  const [topics, recommendations, trends] = await Promise.all([getTopics(), getRecommendations(), getTrends()]);
   const topic = topics.find((item) => String(item.topic_id) === id);
   if (!topic) notFound();
   const recommendation = recommendations.items.find((item) => item.topic_id === topic.topic_id);
+  const trend = trends.find((item) => item.topic_id === topic.topic_id);
+  const itemQuality = await getItemQuality(topic.topic_id);
 
   return (
     <div className="space-y-12">
@@ -54,12 +58,37 @@ export default async function TopicPage({ params }: PageProps<"/topics/[id]">) {
             Что делать
           </h2>
           <p className="mt-1">{recommendation.reason}</p>
+          {recommendation.by_textbook.some((row) => row.delta !== recommendation.delta) && (
+            <ul className="mt-3 space-y-2 text-sm">
+              {recommendation.by_textbook.map((row) => (
+                <li key={row.textbook} className="grid gap-x-4 sm:grid-cols-[7rem_1fr]">
+                  <span className="font-medium tabular-nums">
+                    {row.textbook}
+                    {row.delta !== 0 && ` ${row.delta > 0 ? "+" : "−"}${Math.abs(row.delta)} ч`}
+                  </span>
+                  <span className="text-muted-foreground">{row.reason.replace(`${row.textbook}. `, "")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <Link
             href={`/textbooks?topic_id=${topic.topic_id}`}
             className="mt-2 inline-block text-sm text-primary underline underline-offset-4"
           >
             Сравнить учебники по этой теме
           </Link>
+        </section>
+      )}
+
+      {trend && trend.direction !== "без заметных изменений" && (
+        <section aria-labelledby="trend-title" className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <TrendSparkline trend={trend} />
+          <div>
+            <h2 id="trend-title" className="text-xl font-semibold">
+              Динамика по годам
+            </h2>
+            <p className="text-sm text-muted-foreground">{trend.text}</p>
+          </div>
         </section>
       )}
 
@@ -102,6 +131,8 @@ export default async function TopicPage({ params }: PageProps<"/topics/[id]">) {
           </table>
         </details>
       </section>
+
+      <ItemIssues data={itemQuality} />
 
       <section aria-labelledby="schools-title">
         <h2 id="schools-title" className="text-xl font-semibold">

@@ -1,5 +1,5 @@
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -30,8 +30,29 @@ RESULT_COLUMNS = [
 ]
 
 
+# Чтение всех результатов через ORM занимает около 0,3 с и повторялось в каждом запросе.
+# Кэш хранит одну копию; отпечаток БД меняется при пересоздании данных, и кэш сбрасывается сам.
+_results_cache: dict[tuple, pd.DataFrame] = {}
+
+
+def results_fingerprint(session: Session) -> tuple:
+    row = session.execute(
+        select(func.count(TestResult.id), func.max(TestResult.id), func.sum(TestResult.score))
+    ).one()
+    return tuple(row)
+
+
 def load_results(session: Session) -> pd.DataFrame:
     """Возвращает по строке на результат теста со школой, темой и учебником."""
+    key = results_fingerprint(session)
+    if key not in _results_cache:
+        _results_cache.clear()
+        _results_cache[key] = read_results(session)
+    # Копия: расчёты не должны случайно испортить общий кэш.
+    return _results_cache[key].copy()
+
+
+def read_results(session: Session) -> pd.DataFrame:
     query = (
         select(
             TestResult.student_id,

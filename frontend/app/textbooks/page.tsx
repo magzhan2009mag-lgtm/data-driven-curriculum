@@ -1,9 +1,9 @@
-import { Check, Minus } from "lucide-react";
+import { Check, Minus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getComparison, getTopics } from "@/lib/api";
+import { getComparison, getRegression, getTopics } from "@/lib/api";
 import { formatIndex, formatP, formatScore, formatSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,11 @@ function TopicLink({ href, active, label }: { href: string; active: boolean; lab
 export default async function TextbooksPage({ searchParams }: PageProps<"/textbooks">) {
   const { topic_id: rawId } = await searchParams;
   const topicId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : undefined;
-  const [topics, comparison] = await Promise.all([getTopics(), getComparison(topicId)]);
+  const [topics, comparison, regression] = await Promise.all([
+    getTopics(),
+    getComparison(topicId),
+    getRegression(topicId),
+  ]);
   if (!comparison) notFound();
   if (topics.length === 0) return <EmptyState />;
 
@@ -38,6 +42,21 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
         </h1>
         <p className="mt-3 max-w-prose text-lg">{comparison.conclusion}</p>
       </section>
+
+      {comparison.confounding_note && (
+        <section aria-labelledby="confounding-title" className="max-w-prose border-l-2 border-primary pl-4">
+          <h2 id="confounding-title" className="flex items-center gap-2 text-xl font-semibold">
+            <TriangleAlert className="size-4 text-primary" aria-hidden />
+            Простое сравнение средних вводит в заблуждение
+          </h2>
+          <p className="mt-1">{comparison.confounding_note}</p>
+          {regression && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Проверка регрессией, где учтены школа и тема: {regression.conclusion}
+            </p>
+          )}
+        </section>
+      )}
 
       <nav aria-label="Выбор темы" className="flex flex-wrap gap-1.5">
         <TopicLink href="/textbooks" active={topicId === undefined} label="Все темы" />
@@ -55,10 +74,18 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
         {comparison.textbooks.map((book) => (
           <div key={book.textbook_id} className="border-t py-5 first:border-t-0 sm:border-t-0">
             <h2 className="font-medium">{book.name}</h2>
-            <p className="mt-2 text-4xl font-semibold">{formatScore(book.avg_score)}</p>
-            <p className="mt-1 text-sm text-muted-foreground">средний балл, {book.n_students} уч.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Отклонение от среднего по школе и теме: {formatSigned(book.mean_z)} σ
+            <div className="mt-2 flex items-baseline gap-x-6 tabular-nums">
+              <div>
+                <p className="text-4xl font-semibold">{formatScore(book.adjusted_score)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">в одинаковых школах</p>
+              </div>
+              <div>
+                <p className="text-xl text-muted-foreground">{formatScore(book.avg_score)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">простое среднее</p>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {book.n_students} уч., отклонение от среднего по школе и теме {formatSigned(book.mean_z)} σ
             </p>
           </div>
         ))}

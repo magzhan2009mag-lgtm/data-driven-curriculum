@@ -77,3 +77,25 @@ def test_recommendations_keep_total_hours(client):
         "topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason", "by_textbook",
     }
     assert len(body["textbook_plans"]) == 3
+
+
+def test_results_cache_follows_database_changes(tmp_path):
+    from sqlalchemy import create_engine, func, select, update
+
+    from app.analytics.data import load_results
+    from app.models import Base, TestResult
+    from scripts.seed import generate
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'cache.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        generate(session)
+        first = load_results(session)
+        first["score"] = -1
+        # Изменение полученной таблицы не портит кэш.
+        assert (load_results(session)["score"] >= 0).all()
+
+        session.execute(update(TestResult).where(TestResult.id == 1).values(score=TestResult.score + 1))
+        session.commit()
+        # После изменения данных кэш сбрасывается и отдаёт новые баллы.
+        assert load_results(session)["score"].sum() == session.scalar(select(func.sum(TestResult.score)))
