@@ -2,18 +2,15 @@ import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { getExplanations, type Recommendations } from "@/lib/api";
 
-/** Пояснения от Claude для тем, где часы меняются. Грузится отдельно, чтобы не задерживать страницу. */
+/**
+ * Пояснения от Claude для тем, где часы меняются. Грузится отдельно, чтобы не задерживать страницу.
+ * Если ИИ недоступен (нет ключа или связи), блока нет: на странице остаются шаблонные тексты.
+ */
 export async function AiExplanations({ items }: { items: Recommendations["items"] }) {
   const explanations = await getExplanations();
-  const changed = items.filter((item) => item.delta !== 0 || item.by_textbook.some((row) => row.delta !== 0));
+  if (!explanations || explanations.source !== "llm") return null;
 
-  if (!explanations || explanations.source !== "llm") {
-    return (
-      <p className="max-w-prose text-sm text-muted-foreground">
-        Пояснения от ИИ сейчас недоступны (нет ключа API или связи), поэтому ниже показаны шаблонные тексты.
-      </p>
-    );
-  }
+  const changed = items.filter((item) => item.delta !== 0 || item.by_textbook.some((row) => row.delta !== 0));
 
   const texts = new Map(explanations.items.map((item) => [item.topic_id, item.explanation]));
   return (
