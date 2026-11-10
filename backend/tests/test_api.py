@@ -46,7 +46,7 @@ def test_compare_format(client, topics):
     body = client.get("/textbooks/compare", params={"topic_id": topic_id}).json()
     assert body["topic_id"] == topic_id
     assert body["topic"] == "Дроби"
-    assert set(body["textbooks"][0]) == {"textbook_id", "name", "n_students", "avg_score", "mean_z"}
+    assert set(body["textbooks"][0]) == {"textbook_id", "name", "n_students", "avg_score", "adjusted_score", "mean_z"}
     assert len(body["comparisons"]) == 3
     assert set(body["comparisons"][0]) == {
         "a", "b", "p_value", "p_adjusted", "cohens_d", "effect", "significant",
@@ -54,6 +54,7 @@ def test_compare_format(client, topics):
     }
     assert body["conclusion"].startswith("Тема «Дроби»")
     assert body["limitation"]
+    assert "Учебник C выглядит сильнее" in body["confounding_note"]
 
 
 def test_compare_without_topic(client):
@@ -73,5 +74,6 @@ def test_recommendations_keep_total_hours(client):
     assert body["total_hours"] == 84
     assert sum(item["hours_recommended"] for item in body["items"]) == 84
     assert set(body["items"][0]) == {
-        "topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason",
+        "topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason", "by_textbook",
     }
+    assert len(body["textbook_plans"]) == 3

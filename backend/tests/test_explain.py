@@ -56,6 +56,16 @@ def test_request_uses_expected_model_and_only_aggregates(fake_claude):
     }
 
 
+def test_facts_include_textbook_aggregates_only():
+    items = recommendations()["items"]
+    items[0]["by_textbook"] = [{"textbook": "Учебник B", "level": "hard", "avg_score": 45.0, "fail_rate": 0.6,
+                                "difficulty_index": 0.55, "hours_recommended": 7, "delta": 2, "reason": "Шаблон"}]
+    fact = explain.build_facts(items)[0]
+    assert fact["by_textbook"] == [
+        {"textbook": "Учебник B", "level": "hard", "avg_score": 45.0, "fail_rate": 0.6, "delta": 2}
+    ]
+
+
 def test_answer_is_cached(fake_claude):
     explain.explain_recommendations(recommendations())
     explain.explain_recommendations(recommendations())

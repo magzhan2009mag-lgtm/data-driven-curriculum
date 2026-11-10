@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.analytics.data import RESULT_COLUMNS, load_results
 from app.analytics.difficulty import compute_index, difficulty_level, topic_difficulty
-from app.analytics.recommendations import change_limit, hours_word, recommend_hours
+from app.analytics.recommendations import change_limit, hard_need, hours_word, recommend_by_textbook, recommend_hours
 from app.analytics.textbooks import MIN_STUDENTS, bootstrap_ci, compare_textbooks, effect_label, holm_adjust
 
 
@@ -172,7 +172,7 @@ def test_comparison_without_topic_covers_all_topics(results):
 def test_hours_sum_is_preserved_on_seed(results):
     recommendations = recommend_hours(topic_difficulty(results))
     assert recommendations["total_hours"] == 84
-    assert recommendations["hours_moved"] == 6
+    assert recommendations["hours_moved"] == 3
     assert sum(item["hours_recommended"] for item in recommendations["items"]) == 84
     assert sum(item["delta"] for item in recommendations["items"]) == 0
 
@@ -188,7 +188,7 @@ def test_only_hard_receive_and_only_easy_give(results):
 
 
 def test_limit_is_respected():
-    topics = [topic(1, "hard", 5, 0.5), *(topic(i, "easy", 9, 0.1) for i in range(2, 6))]
+    topics = [topic(1, "hard", 5, 0.8), *(topic(i, "easy", 9, 0.1) for i in range(2, 6))]
     items = recommend_hours(topics)["items"]
     assert items[0]["delta"] == change_limit(5) == 2
     assert all(abs(item["delta"]) <= change_limit(item["hours_current"]) for item in items)
@@ -201,16 +201,54 @@ def test_stops_when_no_donors():
 
 
 def test_hard_with_highest_pressure_gets_hour_first():
-    topics = [topic(1, "hard", 10, 0.45), topic(2, "hard", 5, 0.45), topic(3, "easy", 4, 0.1)]
+    # Донор может отдать только один час: его получает тема с наибольшей сложностью на час.
+    topics = [topic(1, "hard", 10, 0.45), topic(2, "hard", 5, 0.45), topic(3, "easy", 2, 0.1)]
     items = {item["topic_id"]: item for item in recommend_hours(topics)["items"]}
-    assert items[2]["delta"] == 2 and items[1]["delta"] == 0
+    assert items[2]["delta"] == 1 and items[1]["delta"] == 0
+
+
+@pytest.mark.parametrize(
+    ("hours", "index", "need"),
+    [(5, 0.40, 1), (5, 0.44, 1), (5, 0.5, 1), (5, 0.54, 2), (5, 0.9, 2), (10, 0.46, 2), (10, 0.6, 3)],
+)
+def test_need_grows_with_difficulty(hours, index, need):
+    assert hard_need(topic(1, "hard", hours, index)) == need
+
+
+def test_harder_topic_gets_more_hours():
+    topics = [topic(1, "hard", 5, 0.6), topic(2, "hard", 5, 0.42), *(topic(i, "easy", 9, 0.1) for i in range(3, 6))]
+    items = {item["topic_id"]: item["delta"] for item in recommend_hours(topics)["items"]}
+    assert items[1] == 2 and items[2] == 1
+
+
+def test_textbook_plans_on_seed(results):
+    response = recommend_by_textbook(results)
+    plans = {plan["textbook"]: plan for plan in response["textbook_plans"]}
+    assert set(plans) == {"Учебник A", "Учебник B", "Учебник C"}
+    fractions = next(item for item in response["items"] if item["topic"] == "Дроби")
+    by_book = {row["textbook"]: row for row in fractions["by_textbook"]}
+    # Слабое место учебника B: его классам на «Дроби» нужно больше часов, чем остальным.
+    assert by_book["Учебник B"]["delta"] == 2
+    assert by_book["Учебник B"]["delta"] > max(by_book["Учебник A"]["delta"], by_book["Учебник C"]["delta"])
+    assert "«Дроби» +2" in plans["Учебник B"]["text"]
+    for name in plans:
+        rows_of_book = [row for item in response["items"] for row in item["by_textbook"] if row["textbook"] == name]
+        assert sum(row["hours_recommended"] for row in rows_of_book) == 84
+        assert all(row["reason"].startswith(f"{name}. ") for row in rows_of_book)
 
 
 def test_reason_has_numbers_and_no_promises():
-    reason = recommend_hours([topic(1, "hard", 5, 0.5), topic(2, "easy", 9, 0.1)])["items"][0]["reason"]
+    reason = recommend_hours([topic(1, "hard", 5, 0.56), topic(2, "easy", 9, 0.1)])["items"][0]["reason"]
     assert reason == (
-        "Тема сложная: средний балл 60 из 100, не справились 20% учеников. Рекомендуем добавить 2 часа (5 → 7)."
+        "Тема сложная: средний балл 60 из 100, не справились 20% результатов. Она в 1,4 раза сложнее "
+        "границы сложной темы, поэтому ей нужно около 7 часов вместо 5. Рекомендуем добавить 2 часа (5 → 7)."
     )
+
+
+def test_reason_explains_limit():
+    reason = recommend_hours([topic(1, "hard", 5, 0.9), topic(2, "easy", 9, 0.1)])["items"][0]["reason"]
+    assert "около 11 часов вместо 5" in reason
+    assert "не менять программу резко" in reason
 
 
 @pytest.mark.parametrize(
@@ -219,3 +257,47 @@ def test_reason_has_numbers_and_no_promises():
 )
 def test_hours_word(count, word):
     assert hours_word(count) == word
+
+
+def confounded_table() -> pd.DataFrame:
+    """Учебник C стоит в сильной школе, A в слабой; внутри каждой школы учебники равны."""
+    rng = np.random.default_rng(1)
+    frames = []
+    layout = [(1, 50, ["Учебник A"] * 3 + ["Учебник C"]), (2, 70, ["Учебник A"] + ["Учебник C"] * 3)]
+    student = 1
+    for school_id, level, books in layout:
+        for class_no, book in enumerate(books):
+            scores = (level + rng.normal(0, 8, 30)).round().tolist()
+            frame = rows(scores, textbook=book, textbook_id=1 if book == "Учебник A" else 3, first_student=student)
+            frame["school_id"] = school_id
+            frame["school"] = f"Школа №{school_id}"
+            frame["class_id"] = school_id * 10 + class_no
+            frames.append(frame)
+            student += 30
+    return pd.concat(frames, ignore_index=True)
+
+
+def test_confounding_note_explains_school_mix():
+    result = compare_textbooks(confounded_table())
+    books = {book["name"]: book for book in result["textbooks"]}
+    assert books["Учебник C"]["avg_score"] - books["Учебник A"]["avg_score"] > 5
+    assert abs(books["Учебник C"]["adjusted_score"] - books["Учебник A"]["adjusted_score"]) < 2
+    assert result["comparisons"][0]["significant"] is False
+    assert "Без учёта школ Учебник C выглядит сильнее" in result["confounding_note"]
+    assert "не подтверждается" in result["confounding_note"]
+
+
+def test_no_confounding_note_when_schools_are_balanced():
+    data = pd.concat(
+        [rows([60, 70] * 20), rows([50, 60] * 20, textbook="Учебник B", textbook_id=2, first_student=1000)]
+    )
+    assert compare_textbooks(data)["confounding_note"] is None
+
+
+def test_seed_naive_average_favours_c(results):
+    result = compare_textbooks(results)
+    books = {book["name"]: book for book in result["textbooks"]}
+    assert books["Учебник C"]["avg_score"] - books["Учебник A"]["avg_score"] > 3
+    assert abs(books["Учебник C"]["adjusted_score"] - books["Учебник A"]["adjusted_score"]) < 1.5
+    assert "Учебник C выглядит сильнее, чем Учебник A" in result["confounding_note"]
+    assert "Учебник C выше, чем Учебник A" not in result["conclusion"]

@@ -20,6 +20,8 @@ SYSTEM_PROMPT = """Ты помогаешь методисту понять ре�
 Методист не статистик, поэтому обходись без терминов вроде p-value и индекса.
 Используй только числа из исходных данных и не добавляй новых фактов.
 Часы перераспределяются между темами, поэтому не обещай рост баллов и не называй ожидаемый результат.
+Если в by_textbook видно, что по одному учебнику тема даётся заметно хуже, назови этот учебник
+и сколько часов советуется его классам.
 Верни пояснение для каждой темы с её topic_id."""
 
 _cache: dict[str, dict[int, str]] = {}
@@ -37,7 +39,14 @@ class Explanations(BaseModel):
 def build_facts(items: list[dict]) -> list[dict]:
     """Оставляет только агрегаты по темам: данные учеников в запрос не попадают."""
     fields = ("topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason")
-    return [{field: item[field] for field in fields} for item in items]
+    textbook_fields = ("textbook", "level", "avg_score", "fail_rate", "delta")
+    facts = []
+    for item in items:
+        fact = {field: item[field] for field in fields}
+        if "by_textbook" in item:
+            fact["by_textbook"] = [{field: row[field] for field in textbook_fields} for row in item["by_textbook"]]
+        facts.append(fact)
+    return facts
 
 
 def request_explanations(facts: list[dict]) -> dict[int, str] | None:

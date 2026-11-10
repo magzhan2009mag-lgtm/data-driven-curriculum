@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -62,27 +63,52 @@ def test_clusters_on_seed_cover_everything(results):
     assert sum(len(group["members"]) for group in cluster_schools(results)) == 5
 
 
-def class_table(averages: list[float]) -> pd.DataFrame:
+def class_table(levels: list[float], dip: dict[tuple[int, int], float] | None = None) -> pd.DataFrame:
+    """Классы разного уровня, 4 темы разной сложности, шум около 1 балла; dip сдвигает одну пару «класс × тема»."""
+    dip = dip or {}
+    rng = np.random.default_rng(0)
+    topic_bases = {1: 0, 2: -10, 3: 5, 4: -3}
     rows = []
-    for class_id, average in enumerate(averages, start=1):
-        for offset in (-4, 0, 4):
-            rows.append({"topic_id": 1, "class_id": class_id, "class": f"6-{class_id}", "school": "Школа №1",
-                         "score": average + offset})
+    for class_id, level in enumerate(levels, start=1):
+        for topic_id, base in topic_bases.items():
+            cell = level + base + rng.normal(0, 1) + dip.get((class_id, topic_id), 0)
+            for offset in (-4, 0, 4):
+                rows.append({"class_id": class_id, "class": f"6-{class_id}", "school": "Школа №1",
+                             "textbook": "A", "topic_id": topic_id, "topic": f"Тема {topic_id}",
+                             "score": cell + offset})
     return pd.DataFrame(rows)
 
 
-def test_outlier_class_is_found():
-    averages = [60, 61, 59, 62, 58, 60.5, 59.5, 61.5, 58.5, 20]
-    result = class_outliers(class_table(averages))
-    assert [item["class"] for item in result["outliers"]] == ["6-10"]
-    assert result["outliers"][0]["direction"] == "ниже остальных"
-    assert "1 из 10" in result["conclusion"]
+def test_failed_topic_in_one_class_is_found():
+    levels = [60, 64, 57, 70, 62, 55, 66, 59, 63, 61, 58, 65]
+    result = class_outliers(class_table(levels, dip={(3, 2): -12}))
+    assert [(item["class"], item["topic"]) for item in result["outliers"]] == [("6-3", "Тема 2")]
+    item = result["outliers"][0]
+    assert item["direction"] == "ниже ожидаемого"
+    assert item["difference"] < -8
+    assert "Тема 2" in item["text"] and "6-3" in item["text"]
 
 
-def test_equal_classes_have_no_outliers():
-    result = class_outliers(class_table([60] * 6))
+def test_class_level_alone_is_not_an_outlier():
+    # Класс 6-4 сильнее остальных по всем темам: это его уровень, а не аномалия темы.
+    result = class_outliers(class_table([60, 61, 59, 85, 62, 58, 63, 57, 64, 60]))
     assert result["outliers"] == []
     assert "не найдено" in result["conclusion"]
+
+
+def test_too_few_topics_give_no_outliers():
+    table = class_table([60, 61, 20])
+    result = class_outliers(table[table["topic_id"] <= 2])
+    assert result["outliers"] == []
+    assert "недостаточно" in result["conclusion"]
+
+
+def test_seed_anomaly_is_the_only_outlier(results):
+    from scripts.seed import ANOMALY
+
+    school_no, class_name, topic = ANOMALY
+    found = [(item["school"], item["class"], item["topic"]) for item in class_outliers(results)["outliers"]]
+    assert found == [(f"Школа №{school_no}", class_name, topic)]
 
 
 def test_new_endpoints_answer(client):

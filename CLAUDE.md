@@ -49,7 +49,7 @@ TopicYearStat(topic, school, year, avg_score, n_students)
 ## API
 - GET /topics/difficulty — сложность тем
 - GET /textbooks/compare?topic_id= — сравнение учебников
-- GET /recommendations — рекомендации по часам
+- GET /recommendations — рекомендации по часам: общие и по учебникам
 - GET /recommendations/optimal — те же рекомендации через linprog
 - GET /recommendations/explanation — пояснения Claude (нужен ANTHROPIC_API_KEY, без него шаблоны)
 - GET /textbooks/regression?topic_id= — вклад учебника с контролем школы и темы
@@ -58,7 +58,7 @@ TopicYearStat(topic, school, year, avg_score, n_students)
 - GET /items/quality?topic_id= — point-biserial и модель Раша
 - GET /hours/effect — связь часов и результата
 - GET /clusters — группы похожих тем и школ
-- GET /classes/outliers — классы с аномальными результатами
+- GET /classes/outliers — пары «класс × тема» с аномальными результатами
 
 ## Команды
 - запуск всего: двойной клик по start.bat

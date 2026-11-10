@@ -11,6 +11,8 @@ MIN_STUDENTS = 30
 BOOTSTRAP_REPEATS = 2000
 BOOTSTRAP_SEED = 42
 NOT_ENOUGH_DATA = "мало данных"
+# Если сырая разница и разница внутри школ расходятся хотя бы на столько баллов, предупреждаем о смешении.
+CONFOUNDING_GAP = 2.0
 LIMITATION = (
     "Тест не учитывает, что ученики сгруппированы по классам, поэтому значимость может быть "
     "немного завышена. Опирайтесь и на p-value, и на размер эффекта."
@@ -73,6 +75,52 @@ def student_z_scores(results: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def format_points(value: float) -> str:
+    return f"{abs(value):.1f}".replace(".", ",")
+
+
+def adjusted_scores(results: pd.DataFrame) -> dict[str, float]:
+    """Средний балл учебника, если бы все учебники проходили в одинаковых школах.
+
+    Общее среднее плюс среднее отклонение результата от среднего по его школе и теме.
+    """
+    deviation = results["score"] - results.groupby(["school_id", "topic_id"])["score"].transform("mean")
+    return (results["score"].mean() + deviation.groupby(results["textbook"]).mean()).to_dict()
+
+
+def confounding_note(textbooks: list[dict], comparisons: list[dict]) -> str | None:
+    """Объясняет, когда сырые средние вводят в заблуждение из-за разного состава школ."""
+    raw = {book["name"]: book["avg_score"] for book in textbooks}
+    adjusted = {book["name"]: book["adjusted_score"] for book in textbooks}
+    candidates = []
+    for pair in comparisons:
+        if pair["p_adjusted"] is None:
+            continue
+        raw_diff = raw[pair["a"]] - raw[pair["b"]]
+        adjusted_diff = adjusted[pair["a"]] - adjusted[pair["b"]]
+        if abs(raw_diff) >= CONFOUNDING_GAP and abs(raw_diff - adjusted_diff) >= CONFOUNDING_GAP:
+            candidates.append((pair, raw_diff, adjusted_diff))
+    if not candidates:
+        return None
+
+    # Важнее всего пары, где сырая разница есть, а при честном сравнении не подтверждается.
+    pair, raw_diff, adjusted_diff = max(
+        candidates, key=lambda item: (not item[0]["significant"], abs(item[1] - item[2]))
+    )
+    higher, lower = (pair["a"], pair["b"]) if raw_diff > 0 else (pair["b"], pair["a"])
+    if not pair["significant"]:
+        within = f"разница {format_points(adjusted_diff)} балла и статистически не подтверждается"
+    elif (adjusted_diff > 0) == (raw_diff > 0):
+        within = f"{higher} выше на {format_points(adjusted_diff)} балла"
+    else:
+        within = f"{lower} выше на {format_points(adjusted_diff)} балла"
+    return (
+        f"Без учёта школ {higher} выглядит сильнее, чем {lower}, на {format_points(raw_diff)} балла. "
+        "Но учебники распределены по школам неравномерно, а уровень школ сильно различается. "
+        f"Если сравнивать классы одной и той же школы, {within}."
+    )
+
+
 def format_p(p_value: float) -> str:
     # Неразрывные пробелы: при переносе строки «p < 0,001» не должно разрываться.
     if p_value < 0.001:
@@ -84,14 +132,14 @@ def build_conclusion(subject: str, textbooks: list[dict], comparisons: list[dict
     if not textbooks:
         return "Нет результатов для сравнения учебников."
 
-    averages = {book["name"]: book["avg_score"] for book in textbooks}
+    averages = {book["name"]: book["adjusted_score"] for book in textbooks}
     sentences = []
     significant = [pair for pair in comparisons if pair["significant"]]
     for pair in sorted(significant, key=lambda item: -abs(item["cohens_d"])):
         higher, lower = (pair["a"], pair["b"]) if pair["cohens_d"] > 0 else (pair["b"], pair["a"])
         difference = f"{abs(averages[higher] - averages[lower]):.1f}".replace(".", ",")
         sentences.append(
-            f"{higher} выше, чем {lower}, на {difference} балла "
+            f"{higher} выше, чем {lower}, на {difference} балла в одних и тех же школах "
             f"(размер эффекта: {pair['effect']}, {format_p(pair['p_adjusted'])})."
         )
 
@@ -115,6 +163,7 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
 
     students = student_z_scores(scope) if not scope.empty else pd.DataFrame(columns=["student_id", "textbook", "z"])
     z_by_book = {name: group["z"].to_numpy() for name, group in students.groupby("textbook")}
+    adjusted = adjusted_scores(scope) if not scope.empty else {}
 
     textbooks = [
         {
@@ -122,6 +171,7 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
             "name": name,
             "n_students": len(z_by_book[name]),
             "avg_score": round(float(group["score"].mean()), 1),
+            "adjusted_score": round(float(adjusted[name]), 1),
             "mean_z": round(float(z_by_book[name].mean()), 3),
         }
         for (textbook_id, name), group in scope.groupby(["textbook_id", "textbook"])
@@ -152,6 +202,7 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
 
     subject = f"Тема «{topic}»" if topic else "Все темы"
     conclusion = build_conclusion(subject, textbooks, comparisons)
+    note = confounding_note(textbooks, comparisons)
 
     for pair in tested:
         pair["p_value"] = round(pair["p_value"], 4)
@@ -168,5 +219,6 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
         "textbooks": textbooks,
         "comparisons": comparisons,
         "conclusion": conclusion,
+        "confounding_note": note,
         "limitation": LIMITATION,
     }

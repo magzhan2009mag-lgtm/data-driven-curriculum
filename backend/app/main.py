@@ -12,7 +12,7 @@ from app.analytics.hours_effect import hours_effect
 from app.analytics.items import item_quality
 from app.analytics.matching import match_textbooks
 from app.analytics.outliers import class_outliers
-from app.analytics.recommendations import recommend_hours, recommend_optimal_hours
+from app.analytics.recommendations import recommend_by_textbook, recommend_optimal_hours
 from app.analytics.regression import textbook_regression
 from app.analytics.textbooks import compare_textbooks
 from app.analytics.trends import topic_trends
@@ -52,7 +52,7 @@ def get_textbooks_regression(topic_id: int | None = None, db: Session = Depends(
 
 @app.get("/recommendations")
 def get_recommendations(db: Session = Depends(get_db)) -> dict:
-    return recommend_hours(topic_difficulty(load_results(db)))
+    return recommend_by_textbook(load_results(db))
 
 
 @app.get("/recommendations/optimal")
@@ -62,7 +62,7 @@ def get_recommendations_optimal(db: Session = Depends(get_db)) -> dict:
 
 @app.get("/recommendations/explanation")
 def get_recommendations_explanation(db: Session = Depends(get_db)) -> dict:
-    return explain_recommendations(recommend_hours(topic_difficulty(load_results(db))))
+    return explain_recommendations(recommend_by_textbook(load_results(db)))
 
 
 @app.get("/hours/effect")
