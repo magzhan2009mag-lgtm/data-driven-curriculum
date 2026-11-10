@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.optimize import linprog
 
 from app.analytics.difficulty import HARD_FROM, topic_difficulty
+from app.analytics.textbooks import adjust_for_school
 
 MIN_HOURS = 1
 
@@ -180,12 +181,15 @@ def plan_text(textbook: str, added: list[dict]) -> str:
 def recommend_by_textbook(results: pd.DataFrame) -> dict:
     """Общий план плюс отдельный план для классов каждого учебника.
 
-    У каждого учебника свой перенос часов, и сумма часов в каждом плане не меняется.
+    Общий план считается по сырым баллам. Планы учебников считаются по баллам с поправкой на школу,
+    как если бы все учебники проходили в одинаковых школах: иначе учебник, который чаще выбирают
+    сильные школы, выглядел бы лучше, чем есть. У каждого учебника свой перенос часов,
+    и сумма часов в каждом плане не меняется.
     """
     response = recommend_hours(topic_difficulty(results))
     breakdown = {item["topic_id"]: [] for item in response["items"]}
     plans = []
-    for textbook, group in results.groupby("textbook"):
+    for textbook, group in adjust_for_school(results).groupby("textbook"):
         topics = topic_difficulty(group)
         deltas = redistribute(topics)
         added = []

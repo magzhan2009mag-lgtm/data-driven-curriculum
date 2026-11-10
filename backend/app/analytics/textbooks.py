@@ -79,13 +79,27 @@ def format_points(value: float) -> str:
     return f"{abs(value):.1f}".replace(".", ",")
 
 
+def school_deviation(results: pd.DataFrame) -> pd.Series:
+    """Отклонение балла от среднего по его школе и теме."""
+    return results["score"] - results.groupby(["school_id", "topic_id"])["score"].transform("mean")
+
+
 def adjusted_scores(results: pd.DataFrame) -> dict[str, float]:
     """Средний балл учебника, если бы все учебники проходили в одинаковых школах.
 
     Общее среднее плюс среднее отклонение результата от среднего по его школе и теме.
     """
-    deviation = results["score"] - results.groupby(["school_id", "topic_id"])["score"].transform("mean")
-    return (results["score"].mean() + deviation.groupby(results["textbook"]).mean()).to_dict()
+    return (results["score"].mean() + school_deviation(results).groupby(results["textbook"]).mean()).to_dict()
+
+
+def adjust_for_school(results: pd.DataFrame) -> pd.DataFrame:
+    """Баллы, как если бы все учебники проходили в одинаковых школах.
+
+    Балл − среднее школы по теме + среднее темы по всем школам. Средний балл учебника по теме
+    из этих баллов совпадает с adjusted_score в сравнении учебников по этой теме.
+    """
+    topic_mean = results.groupby("topic_id")["score"].transform("mean")
+    return results.assign(score=school_deviation(results) + topic_mean)
 
 
 def confounding_note(textbooks: list[dict], comparisons: list[dict]) -> str | None:

@@ -93,6 +93,9 @@ export default async function RecommendationsPage() {
             <li key={plan.textbook}>{plan.text}</li>
           ))}
         </ul>
+        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+          Учебники сравниваются так, будто они проходят в одинаковых школах.
+        </p>
         <p className="mt-3 max-w-prose text-sm text-muted-foreground">
           Часы переносятся с лёгких тем на сложные, сумма в программе не меняется: {formatHours(total_hours)}. Чем
           сложнее тема, тем больше часов она получает; за раз тема меняется не больше чем на 30% плана (но всегда можно на 2

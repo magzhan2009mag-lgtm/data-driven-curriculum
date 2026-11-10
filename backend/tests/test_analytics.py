@@ -227,14 +227,71 @@ def test_textbook_plans_on_seed(results):
     assert set(plans) == {"Учебник A", "Учебник B", "Учебник C"}
     fractions = next(item for item in response["items"] if item["topic"] == "Дроби")
     by_book = {row["textbook"]: row for row in fractions["by_textbook"]}
+    # В одних и тех же школах A и C на «Дробях» равны, поэтому и часы им нужны одинаковые.
+    assert by_book["Учебник A"]["delta"] == by_book["Учебник C"]["delta"]
     # Слабое место учебника B: его классам на «Дроби» нужно больше часов, чем остальным.
     assert by_book["Учебник B"]["delta"] == 2
-    assert by_book["Учебник B"]["delta"] > max(by_book["Учебник A"]["delta"], by_book["Учебник C"]["delta"])
+    assert by_book["Учебник B"]["delta"] > by_book["Учебник A"]["delta"]
     assert "«Дроби» +2" in plans["Учебник B"]["text"]
+    moved = {name: plan["hours_moved"] for name, plan in plans.items()}
+    assert abs(moved["Учебник A"] - moved["Учебник C"]) <= 1
+    assert moved["Учебник B"] > max(moved["Учебник A"], moved["Учебник C"])
     for name in plans:
         rows_of_book = [row for item in response["items"] for row in item["by_textbook"] if row["textbook"] == name]
         assert sum(row["hours_recommended"] for row in rows_of_book) == 84
         assert all(row["reason"].startswith(f"{name}. ") for row in rows_of_book)
+
+
+def test_textbook_plan_scores_match_textbook_page(results):
+    # Средний балл учебника в плане часов тот же, что на странице «Учебники» по этой теме.
+    response = recommend_by_textbook(results)
+    for item in response["items"]:
+        compared = compare_textbooks(results, item["topic_id"])
+        adjusted = {book["name"]: book["adjusted_score"] for book in compared["textbooks"]}
+        for row in item["by_textbook"]:
+            assert row["avg_score"] == pytest.approx(adjusted[row["textbook"]], abs=0.1)
+
+
+def test_textbook_plans_ignore_school_mix():
+    # Внутри каждой школы A и C учатся одинаково, но A в основном в слабой школе, а C в сильной.
+    base = {1: [30, 40, 50, 60], 2: [70, 75, 80, 85]}
+    shifts = {1: 0, 2: 15}
+    records = []
+    student = 0
+    for textbook, textbook_id, copies in (("Учебник A", 1, {1: 3, 2: 1}), ("Учебник C", 3, {1: 1, 2: 3})):
+        for school_id, shift in shifts.items():
+            for _ in range(copies[school_id]):
+                for position in range(4):
+                    student += 1
+                    for topic_id, scores in base.items():
+                        records.append(
+                            {
+                                "student_id": student,
+                                "topic_id": topic_id,
+                                "topic": f"Тема {topic_id}",
+                                "hours_planned": 6,
+                                "textbook_id": textbook_id,
+                                "textbook": textbook,
+                                "school_id": school_id,
+                                "school": f"Школа №{school_id}",
+                                "class_id": school_id * 10 + textbook_id,
+                                "class": f"6{textbook[-1]}",
+                                "score": scores[position] + shift,
+                            }
+                        )
+    results = pd.DataFrame(records, columns=RESULT_COLUMNS)
+    # По сырым баллам A выглядел бы слабее C только из-за школ.
+    raw_levels = {name: topic_difficulty(group)[0]["level"] for name, group in results.groupby("textbook")}
+    assert raw_levels == {"Учебник A": "hard", "Учебник C": "medium"}
+
+    response = recommend_by_textbook(results)
+    for item in response["items"]:
+        a, c = item["by_textbook"]
+        assert (a["avg_score"], a["fail_rate"], a["level"], a["delta"]) == (
+            c["avg_score"], c["fail_rate"], c["level"], c["delta"]
+        )
+    hard = next(item for item in response["items"] if item["topic_id"] == 1)
+    assert [row["delta"] for row in hard["by_textbook"]] == [1, 1]
 
 
 def test_reason_has_numbers_and_no_promises():

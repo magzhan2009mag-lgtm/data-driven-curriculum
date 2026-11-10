@@ -58,10 +58,14 @@ description: Формулы, пороги и формат ответов ана�
   «Тема сложная: средний балл 45 из 100, не справились 64% результатов. Она в 1,5 раза сложнее границы
   сложной темы, поэтому ей нужно около 7 часов вместо 5. Рекомендуем добавить 2 часа (5 → 7).»
 - **По учебникам**: тот же расчёт отдельно на результатах классов каждого учебника, у каждого плана сумма 84.
+  Баллы берутся с поправкой на школу: `балл − среднее школы по теме + среднее темы по всем школам`
+  (та же логика, что `adjusted_score`, функция `adjust_for_school` в `textbooks.py`). Из них считаются
+  `avg_score`, `fail_rate`, `difficulty_index` и уровень темы, поэтому средний балл учебника по теме совпадает
+  с `adjusted_score` на странице «Учебники». Учебники сравниваются так, будто они проходят в одинаковых школах:
+  это вклад учебника, а не состав его школ. Общий план «Все классы» считается по сырым баллам.
   `GET /recommendations` добавляет в каждый элемент `by_textbook` (textbook, level, avg_score, fail_rate,
   difficulty_index, hours_recommended, delta, reason с префиксом «Учебник B. ») и на верхнем уровне
-  `textbook_plans` (textbook, hours_moved, added, text). Уровень темы по учебнику считается по сырым
-  результатам его классов: это потребность реальных классов, а не вклад учебника
+  `textbook_plans` (textbook, hours_moved, added, text). На демо-данных у A и C близкие планы, у B часов больше всех
 - `GET /recommendations/optimal`: те же ограничения, `linprog` максимизирует `Σ difficulty_index × изменение часов`.
   Основной способ остаётся жадным, на показе linprog не выделяем: ответ совпадает.
 
@@ -142,8 +146,8 @@ caliper `0.2 × SD логита`. На подобранных парах пар�
 {"total_hours": 84,
  "items": [{"topic_id": 3, "topic": "Дроби", "level": "hard", "hours_current": 5,
             "hours_recommended": 6, "delta": 1, "reason": "текст на русском",
-            "by_textbook": [{"textbook": "Учебник B", "level": "hard", "avg_score": 45.1, "fail_rate": 0.64,
-                             "difficulty_index": 0.585, "hours_recommended": 7, "delta": 2, "reason": "Учебник B. …"}]}],
- "textbook_plans": [{"textbook": "Учебник B", "hours_moved": 5, "added": [{"topic_id": 3, "topic": "Дроби", "delta": 2}],
+            "by_textbook": [{"textbook": "Учебник B", "level": "hard", "avg_score": 46.6, "fail_rate": 0.60,
+                             "difficulty_index": 0.562, "hours_recommended": 7, "delta": 2, "reason": "Учебник B. …"}]}],
+ "textbook_plans": [{"textbook": "Учебник B", "hours_moved": 4, "added": [{"topic_id": 3, "topic": "Дроби", "delta": 2}],
                      "text": "Учебник B: добавить часы на «Дроби» +2, …"}]}
 ```
