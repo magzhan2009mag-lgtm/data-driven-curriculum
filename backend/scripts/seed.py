@@ -5,6 +5,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import brentq
 from scipy.special import expit, logit
 from sqlalchemy import Engine, func, insert, inspect, select
 from sqlalchemy.orm import Session
@@ -26,21 +27,30 @@ from app.models import (
 )
 
 SEED = 42
-SCHOOL_COUNT = 5
 TESTS_PER_TOPIC = 2
 MIN_CLASS_SIZE = 23
 MAX_CLASS_SIZE = 27
 SKIP_RATE = 0.03
 
-SCHOOL_SD = 3
 CLASS_SD = 2
 STUDENT_SD = 10
 NOISE_SD = 8
 
 TEXTBOOKS = ("A", "B", "C")
-# Четвёртый класс каждой школы; первые три всегда A, B, C.
-EXTRA_CLASS_TEXTBOOKS = ("A", "B", "C", "A", "B")
-CLASS_LETTERS = ("А", "Б", "В", "Г")
+# (уровень школы, учебники классов по порядку букв). В каждой школе есть все три учебника,
+# но сильные школы чаще выбирают C: простое сравнение средних из-за этого завышает C.
+SCHOOLS = (
+    (-8, ("A", "A", "B", "C")),
+    (-4, ("A", "B", "B", "C")),
+    (0, ("A", "B", "C", "C")),
+    (4, ("A", "B", "C", "C", "C")),
+    (8, ("A", "B", "C", "C", "C")),
+)
+CLASS_LETTERS = ("А", "Б", "В", "Г", "Д")
+# (номер школы, класс, тема): провал одной темы в одном классе, который не объясняют
+# ни уровень класса, ни учебник. Так выглядит пропущенная тема или смена учителя.
+ANOMALY = (4, "6Д", "Отрицательные числа")
+ANOMALY_EFFECT = -12
 
 # (название, базовый балл, плановые часы)
 TOPICS = (
@@ -51,7 +61,7 @@ TOPICS = (
     ("Проценты", 56, 5),
     ("Отношения и пропорции", 60, 6),
     ("Отрицательные числа", 64, 7),
-    ("Уравнения", 55, 6),
+    ("Уравнения", 53, 6),
     ("Координатная плоскость", 78, 8),
     ("Геометрические фигуры", 76, 8),
     ("Площадь и объём", 68, 7),
@@ -74,6 +84,8 @@ ITEM_DISCRIMINATION = 2.0
 # (тема, номер теста, номер задания): ответ на них не зависит от подготовки ученика.
 BAD_ITEMS = {("Дроби", 1, 3), ("Уравнения", 2, 5)}
 BAD_ITEM_PROBABILITY = 0.5
+# Границы поиска сдвига уровня теста в логитах: с запасом шире любого реального сдвига.
+CALIBRATION_RANGE = 5.0
 
 PRETEST_BASE = 65
 PRETEST_NOISE_SD = 6
@@ -102,6 +114,24 @@ def item_difficulties(seed: int = SEED) -> np.ndarray:
     return values - values.mean(axis=1, keepdims=True)
 
 
+def calibration_shift(ability: np.ndarray, difficulties: np.ndarray, scores: np.ndarray, positions: np.ndarray) -> np.ndarray:
+    """Сдвиг уровня каждого теста, при котором средняя доля верных ответов равна среднему баллу.
+
+    Логистическая функция сжимает среднюю вероятность к 0.5, и без сдвига при большом
+    разбросе учеников доля верных ответов заметно отставала бы от балла.
+    """
+    shift = np.zeros(len(ability))
+    for position in np.unique(positions):
+        rows = positions == position
+        target = scores[rows].mean() / 100
+
+        def gap(value: float) -> float:
+            return expit(ability[rows, None] + value - difficulties[rows]).mean() - target
+
+        shift[rows] = brentq(gap, -CALIBRATION_RANGE, CALIBRATION_RANGE)
+    return shift
+
+
 def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) -> None:
     """Создаёт задания и ответы так, чтобы доля верных ответов соответствовала баллу за тест."""
     rng = np.random.default_rng(seed + ITEM_RESPONSE_SEED_OFFSET)
@@ -122,7 +152,9 @@ def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) 
     # Усиливаем отличия внутри теста, сохраняя его средний уровень.
     test_mean = pd.Series(ability).groupby(positions).transform("mean").to_numpy()
     ability = test_mean + ITEM_DISCRIMINATION * (ability - test_mean)
-    probability = expit(ability[:, None] - item_difficulties(seed)[positions])
+    difficulties = item_difficulties(seed)[positions]
+    ability += calibration_shift(ability, difficulties, results["score"].to_numpy(), positions)
+    probability = expit(ability[:, None] - difficulties)
     probability[is_bad[positions]] = BAD_ITEM_PROBABILITY
     correct = rng.random(probability.shape) < probability
 
@@ -177,15 +209,14 @@ def generate(session: Session, seed: int = SEED) -> None:
     student_school = {}
     student_no = 0
 
-    for school_index in range(SCHOOL_COUNT):
-        school = School(name=f"Школа №{school_index + 1}")
+    for school_no, (school_effect, class_textbooks) in enumerate(SCHOOLS, start=1):
+        school = School(name=f"Школа №{school_no}")
         session.add(school)
-        school_effect = rng.normal(0, SCHOOL_SD)
 
-        class_textbooks = [*TEXTBOOKS, EXTRA_CLASS_TEXTBOOKS[school_index]]
         for letter, textbook_key in zip(CLASS_LETTERS, class_textbooks):
             textbook = textbooks[textbook_key]
-            school_class = SchoolClass(name=f"6{letter}", school=school, textbook=textbook)
+            class_name = f"6{letter}"
+            school_class = SchoolClass(name=class_name, school=school, textbook=textbook)
             session.add(school_class)
             class_effect = rng.normal(0, CLASS_SD)
 
@@ -215,6 +246,8 @@ def generate(session: Session, seed: int = SEED) -> None:
                         + textbook_effect(textbook_key, topic_name)
                         + noise
                     )
+                    if (school_no, class_name, topic_name) == ANOMALY:
+                        raw += ANOMALY_EFFECT
                     rows.append(
                         {
                             "test_id": test.id,

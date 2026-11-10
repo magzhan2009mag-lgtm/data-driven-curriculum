@@ -47,7 +47,7 @@ def all_results(db: Session) -> list[tuple]:
 
 def test_result_count_is_in_expected_range(session):
     count = session.scalar(select(func.count()).select_from(TestResult))
-    assert 11_000 <= count <= 13_000
+    assert 12_000 <= count <= 14_000
 
 
 def extra_data(db: Session) -> list[list[tuple]]:
@@ -143,9 +143,9 @@ def test_class_textbook_distribution(session):
         .group_by(Textbook.name)
     )
     assert dict(session.execute(query).all()) == {
-        "Учебник A": 7,
-        "Учебник B": 7,
-        "Учебник C": 6,
+        "Учебник A": 6,
+        "Учебник B": 6,
+        "Учебник C": 10,
     }
 
 
@@ -157,3 +157,27 @@ def test_fractions_have_the_lowest_average(session):
 def test_textbook_b_has_the_lowest_average(session):
     _, by_textbook = load_summary(session)
     assert by_textbook.loc[by_textbook["avg_score"].idxmin(), "textbook"] == "Учебник B"
+
+
+def test_strong_schools_choose_textbook_c(session):
+    from app.analytics.data import load_results
+    from app.analytics.regression import textbook_regression
+
+    results = load_results(session)
+    raw = results.groupby("textbook")["score"].mean()
+    # Без учёта школы C заметно выше A, но почти вся разница объясняется школами.
+    assert raw["Учебник C"] - raw["Учебник A"] > 3
+    effect = next(item for item in textbook_regression(results)["effects"] if item["textbook"] == "Учебник C")
+    assert abs(effect["coef"]) < 1.5
+    assert effect["significant"] is False
+
+
+def test_anomalous_class_fails_one_topic(session):
+    from app.analytics.data import load_results
+    from scripts.seed import ANOMALY
+
+    school_no, class_name, topic = ANOMALY
+    results = load_results(session)
+    in_school = results[results["school"] == f"Школа №{school_no}"]
+    by_class = in_school[in_school["topic"] == topic].groupby("class")["score"].mean()
+    assert by_class[class_name] < by_class.drop(class_name).min() - 5

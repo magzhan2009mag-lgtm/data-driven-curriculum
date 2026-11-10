@@ -6,6 +6,12 @@ from scipy import stats
 from scipy.special import expit
 
 MIN_POINT_BISERIAL = 0.2
+# Почти все или почти никто отвечают верно: корреляция низкая из-за потолка, а не из-за формулировки.
+TOO_EASY_FROM = 0.9
+TOO_HARD_BELOW = 0.1
+NOT_DISCRIMINATING = "не различает сильных и слабых"
+TOO_EASY = "слишком лёгкое"
+TOO_HARD = "слишком трудное"
 RASCH_MAX_ITERATIONS = 200
 RASCH_TOLERANCE = 1e-4
 RASCH_MAX_STEP = 1.0
@@ -70,6 +76,16 @@ def rasch_difficulties(matrix: pd.DataFrame) -> pd.Series:
     return pd.Series(corrected, index=fitted.columns, dtype=float).reindex(matrix.columns)
 
 
+def item_issue(p_correct: float, correlation: float | None) -> str | None:
+    if p_correct >= TOO_EASY_FROM:
+        return TOO_EASY
+    if p_correct < TOO_HARD_BELOW:
+        return TOO_HARD
+    if correlation is not None and correlation < MIN_POINT_BISERIAL:
+        return NOT_DISCRIMINATING
+    return None
+
+
 def item_quality(responses: pd.DataFrame, topic_id: int) -> dict:
     """Оценивает задания темы."""
     correlations = point_biserial(responses)
@@ -84,6 +100,7 @@ def item_quality(responses: pd.DataFrame, topic_id: int) -> dict:
         item_id = int(row["item_id"])
         correlation = correlations[item_id]
         difficulty = difficulties.get(item_id, np.nan)
+        issue = item_issue(float(row["correct"]), correlation)
         items.append(
             {
                 "item_id": item_id,
@@ -92,7 +109,8 @@ def item_quality(responses: pd.DataFrame, topic_id: int) -> dict:
                 "p_correct": round(float(row["correct"]), 3),
                 "point_biserial": None if correlation is None else round(correlation, 3),
                 "rasch_difficulty": None if np.isnan(difficulty) else round(float(difficulty), 2),
-                "is_bad": correlation is not None and correlation < MIN_POINT_BISERIAL,
+                "issue": issue,
+                "is_bad": issue == NOT_DISCRIMINATING,
             }
         )
 
@@ -104,4 +122,8 @@ def item_quality(responses: pd.DataFrame, topic_id: int) -> dict:
         if bad
         else f"Тема «{topic}»: все задания различают сильных и слабых учеников."
     )
+    extreme = [item for item in items if item["issue"] in (TOO_EASY, TOO_HARD)]
+    if extreme:
+        listed = "; ".join(f"тест {item['test_number']}, задание {item['item_number']}" for item in extreme)
+        conclusion += f" Почти все отвечают одинаково на задания: {listed}. Они мало говорят о подготовке."
     return {"topic_id": topic_id, "topic": topic, "items": items, "n_bad": len(bad), "conclusion": conclusion}

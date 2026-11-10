@@ -88,4 +88,4 @@ def test_equal_classes_have_no_outliers():
 def test_new_endpoints_answer(client):
     clusters = client.get("/clusters").json()
     assert set(clusters) == {"topics", "schools"}
-    assert client.get("/classes/outliers").json()["n_classes"] == 20
+    assert client.get("/classes/outliers").json()["n_classes"] == 22

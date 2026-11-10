@@ -67,7 +67,7 @@ def test_regression_finds_weak_textbook_on_seed(results):
     assert effect["ci_low"] < -8 < effect["ci_high"]
     assert effect["significant"] is True
     assert "Учебник B ниже, чем Учебник A" in result["conclusion"]
-    assert result["n_classes"] == 20
+    assert result["n_classes"] == 22
 
 
 def test_regression_without_topic(results):

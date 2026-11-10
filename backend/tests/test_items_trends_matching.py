@@ -6,7 +6,15 @@ from scipy.special import expit
 from sqlalchemy.orm import Session
 
 from app.analytics.data import load_item_responses, load_results, load_students, load_year_stats
-from app.analytics.items import item_quality, point_biserial, rasch_difficulties
+from app.analytics.items import (
+    NOT_DISCRIMINATING,
+    TOO_EASY,
+    TOO_HARD,
+    item_issue,
+    item_quality,
+    point_biserial,
+    rasch_difficulties,
+)
 from app.analytics.matching import match_pair, match_textbooks
 from app.analytics.trends import IMPROVING, STABLE, WORSENING, topic_trends
 from app.main import app, get_db
@@ -198,3 +206,11 @@ def test_endpoints_answer(client, results):
 def test_unknown_topic_is_404(client):
     assert client.get("/items/quality", params={"topic_id": 999}).status_code == 404
     assert client.get("/textbooks/matching", params={"topic_id": 999}).status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("p_correct", "correlation", "issue"),
+    [(0.95, 0.1, TOO_EASY), (0.05, 0.1, TOO_HARD), (0.5, 0.1, NOT_DISCRIMINATING), (0.5, 0.4, None), (0.5, None, None)],
+)
+def test_item_issue(p_correct, correlation, issue):
+    assert item_issue(p_correct, correlation) == issue
