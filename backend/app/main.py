@@ -12,6 +12,7 @@ from app.analytics.hours_effect import hours_effect
 from app.analytics.items import item_quality
 from app.analytics.matching import match_textbooks
 from app.analytics.outliers import class_outliers
+from app.analytics.prerequisites import root_dependents, topic_prerequisites
 from app.analytics.recommendations import recommend_by_textbook, recommend_optimal_hours
 from app.analytics.regression import textbook_regression
 from app.analytics.textbooks import compare_textbooks
@@ -57,7 +58,8 @@ def get_recommendations(db: Session = Depends(get_db)) -> dict:
 
 @app.get("/recommendations/optimal")
 def get_recommendations_optimal(db: Session = Depends(get_db)) -> dict:
-    return recommend_optimal_hours(topic_difficulty(load_results(db)))
+    results = load_results(db)
+    return recommend_optimal_hours(topic_difficulty(results), root_dependents(topic_prerequisites(results)))
 
 
 @app.get("/recommendations/explanation")
@@ -87,6 +89,11 @@ def get_items_quality(topic_id: int, db: Session = Depends(get_db)) -> dict:
     if responses.empty:
         raise HTTPException(status_code=404, detail="Тема не найдена")
     return item_quality(responses, topic_id)
+
+
+@app.get("/topics/prerequisites")
+def get_topics_prerequisites(db: Session = Depends(get_db)) -> dict:
+    return topic_prerequisites(load_results(db))
 
 
 @app.get("/topics/trends")

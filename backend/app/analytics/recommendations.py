@@ -6,7 +6,11 @@ import pandas as pd
 from scipy.optimize import linprog
 
 from app.analytics.difficulty import HARD_FROM, topic_difficulty
+from app.analytics.prerequisites import ROOT_LEVELS, dependents_phrase, root_dependents, topic_prerequisites
 from app.analytics.textbooks import adjust_for_school
+
+# Корень проблемы: тема → названия тем, которые от неё зависят.
+Roots = dict[int, list[str]]
 
 MIN_HOURS = 1
 
@@ -48,8 +52,23 @@ def hard_need(topic: dict) -> int:
     return min(target_hours(topic) - topic["hours_planned"], change_limit(topic["hours_planned"]))
 
 
-def redistribute(topics: list[dict]) -> dict[int, int]:
-    """Переносит по одному часу с лёгких тем на сложные. Возвращает изменение по каждой теме."""
+def root_dependents_of(topic: dict, roots: Roots | None) -> list[str]:
+    """Темы, которые зависят от этой, если она корень проблемы в этом плане (сложная или средняя)."""
+    if not roots or topic["level"] not in ROOT_LEVELS:
+        return []
+    return roots.get(topic["topic_id"], [])
+
+
+def topic_need(topic: dict, roots: Roots | None = None) -> int:
+    """Сколько часов добавить теме: сложной по её сложности, корню проблемы ещё час, в пределах лимита."""
+    need = hard_need(topic)
+    if root_dependents_of(topic, roots):
+        need = min(need + 1, change_limit(topic["hours_planned"]))
+    return need
+
+
+def redistribute(topics: list[dict], roots: Roots | None = None) -> dict[int, int]:
+    """Переносит по одному часу с лёгких тем на сложные и корни. Возвращает изменение по каждой теме."""
     deltas = {topic["topic_id"]: 0 for topic in topics}
 
     def current_hours(topic: dict) -> int:
@@ -59,9 +78,10 @@ def redistribute(topics: list[dict]) -> dict[int, int]:
         return topic["difficulty_index"] / current_hours(topic)
 
     while True:
+        # Получают только темы с нуждой: у донора изменение отрицательное, но часы ему не возвращаются.
         receivers = [
             topic for topic in topics
-            if topic["level"] == "hard" and deltas[topic["topic_id"]] < hard_need(topic)
+            if topic_need(topic, roots) > 0 and deltas[topic["topic_id"]] < topic_need(topic, roots)
         ]
         donors = [
             topic for topic in topics
@@ -78,7 +98,7 @@ def redistribute(topics: list[dict]) -> dict[int, int]:
         deltas[donor["topic_id"]] -= 1
 
 
-def optimize(topics: list[dict]) -> dict[int, int]:
+def optimize(topics: list[dict], roots: Roots | None = None) -> dict[int, int]:
     """Находит перенос часов с максимальной суммой difficulty_index × изменение часов."""
     if not topics:
         return {}
@@ -86,8 +106,9 @@ def optimize(topics: list[dict]) -> dict[int, int]:
     bounds = []
     for topic in topics:
         limit = change_limit(topic["hours_planned"])
-        if topic["level"] == "hard":
-            bounds.append((0, hard_need(topic)))
+        need = topic_need(topic, roots)
+        if need:
+            bounds.append((0, need))
         elif topic["level"] == "easy":
             bounds.append((-min(limit, topic["hours_planned"] - MIN_HOURS), 0))
         else:
@@ -104,10 +125,11 @@ def optimize(topics: list[dict]) -> dict[int, int]:
     return {topic["topic_id"]: round(delta) for topic, delta in zip(topics, solution.x)}
 
 
-def hard_reason(topic: dict, delta: int, facts: str) -> str:
+def hard_reason(topic: dict, delta: int, facts: str, dependents: list[str]) -> str:
     current = topic["hours_planned"]
+    root = f" От неё {dependents_phrase(dependents)}, поэтому ей нужен ещё час." if dependents else ""
     if not delta:
-        return f"Тема сложная: {facts} Часы не добавлены: не осталось лёгких тем, с которых можно их перенести."
+        return f"Тема сложная: {facts}{root} Часы не добавлены: не осталось лёгких тем, с которых можно их перенести."
 
     ratio = difficulty_ratio(topic)
     target = target_hours(topic)
@@ -118,8 +140,11 @@ def hard_reason(topic: dict, delta: int, facts: str) -> str:
             f"Она в {format_ratio(ratio)} раза сложнее границы сложной темы, поэтому ей нужно около "
             f"{target} {hours_word(target)} вместо {current}."
         )
-    text = f"Тема сложная: {facts} {basis} Рекомендуем добавить {delta} {hours_word(delta)} ({current} → {current + delta})."
-    if delta < target - current:
+    text = (
+        f"Тема сложная: {facts} {basis}{root} "
+        f"Рекомендуем добавить {delta} {hours_word(delta)} ({current} → {current + delta})."
+    )
+    if delta < target - current + (1 if dependents else 0):
         if delta == change_limit(current):
             text += " Больше не добавляем, чтобы не менять программу резко."
         else:
@@ -127,14 +152,20 @@ def hard_reason(topic: dict, delta: int, facts: str) -> str:
     return text
 
 
-def build_reason(topic: dict, delta: int) -> str:
+def build_reason(topic: dict, delta: int, roots: Roots | None = None) -> str:
     current = topic["hours_planned"]
     target = current + delta
     facts = f"средний балл {topic['avg_score']:.0f} из 100, не справились {topic['fail_rate']:.0%} результатов."
     amount = f"{abs(delta)} {hours_word(delta)}"
+    dependents = root_dependents_of(topic, roots)
 
     if topic["level"] == "hard":
-        return hard_reason(topic, delta, facts)
+        return hard_reason(topic, delta, facts, dependents)
+    if dependents:
+        root = f"Тема средней сложности: {facts} От неё {dependents_phrase(dependents)}"
+        if delta:
+            return f"{root}, поэтому рекомендуем добавить {amount} ({current} → {target})."
+        return f"{root}, но часы перенести не с чего. Оставляем {current} {hours_word(current)}."
     if topic["level"] == "easy":
         if delta:
             return f"Тема усваивается хорошо: {facts} Можно передать {amount} более сложным темам ({current} → {target})."
@@ -142,17 +173,17 @@ def build_reason(topic: dict, delta: int) -> str:
     return f"Тема средней сложности: {facts} Оставляем {current} {hours_word(current)} без изменений."
 
 
-def recommend_hours(topics: list[dict]) -> dict:
+def recommend_hours(topics: list[dict], roots: Roots | None = None) -> dict:
     """Принимает результат topic_difficulty и возвращает рекомендации в том же порядке."""
-    return build_response(topics, redistribute(topics))
+    return build_response(topics, redistribute(topics, roots), roots)
 
 
-def recommend_optimal_hours(topics: list[dict]) -> dict:
+def recommend_optimal_hours(topics: list[dict], roots: Roots | None = None) -> dict:
     """То же, что recommend_hours, но перенос часов находит линейное программирование."""
-    return {**build_response(topics, optimize(topics)), "method": "linprog"}
+    return {**build_response(topics, optimize(topics, roots), roots), "method": "linprog"}
 
 
-def build_response(topics: list[dict], deltas: dict[int, int]) -> dict:
+def build_response(topics: list[dict], deltas: dict[int, int], roots: Roots | None = None) -> dict:
     return {
         "total_hours": sum(topic["hours_planned"] for topic in topics),
         "hours_moved": sum(delta for delta in deltas.values() if delta > 0),
@@ -164,7 +195,7 @@ def build_response(topics: list[dict], deltas: dict[int, int]) -> dict:
                 "hours_current": topic["hours_planned"],
                 "hours_recommended": topic["hours_planned"] + deltas[topic["topic_id"]],
                 "delta": deltas[topic["topic_id"]],
-                "reason": build_reason(topic, deltas[topic["topic_id"]]),
+                "reason": build_reason(topic, deltas[topic["topic_id"]], roots),
             }
             for topic in topics
         ],
@@ -184,14 +215,15 @@ def recommend_by_textbook(results: pd.DataFrame) -> dict:
     Общий план считается по сырым баллам. Планы учебников считаются по баллам с поправкой на школу,
     как если бы все учебники проходили в одинаковых школах: иначе учебник, который чаще выбирают
     сильные школы, выглядел бы лучше, чем есть. У каждого учебника свой перенос часов,
-    и сумма часов в каждом плане не меняется.
+    и сумма часов в каждом плане не меняется. Корни проблемы общие для всех планов.
     """
-    response = recommend_hours(topic_difficulty(results))
+    roots = root_dependents(topic_prerequisites(results))
+    response = recommend_hours(topic_difficulty(results), roots)
     breakdown = {item["topic_id"]: [] for item in response["items"]}
     plans = []
     for textbook, group in adjust_for_school(results).groupby("textbook"):
         topics = topic_difficulty(group)
-        deltas = redistribute(topics)
+        deltas = redistribute(topics, roots)
         added = []
         for topic in topics:
             delta = deltas[topic["topic_id"]]
@@ -204,7 +236,7 @@ def recommend_by_textbook(results: pd.DataFrame) -> dict:
                     "difficulty_index": topic["difficulty_index"],
                     "hours_recommended": topic["hours_planned"] + delta,
                     "delta": delta,
-                    "reason": f"{textbook}. {build_reason(topic, delta)}",
+                    "reason": f"{textbook}. {build_reason(topic, delta, roots)}",
                 }
             )
             if delta > 0:

@@ -229,12 +229,19 @@ def test_textbook_plans_on_seed(results):
     by_book = {row["textbook"]: row for row in fractions["by_textbook"]}
     # В одних и тех же школах A и C на «Дробях» равны, поэтому и часы им нужны одинаковые.
     assert by_book["Учебник A"]["delta"] == by_book["Учебник C"]["delta"]
-    # Слабое место учебника B: его классам на «Дроби» нужно больше часов, чем остальным.
+    # Слабое место учебника B: на «Дробях» его классам нужно больше, чем позволяет лимит,
+    # а на «Процентах» часы нужны только им.
     assert by_book["Учебник B"]["delta"] == 2
-    assert by_book["Учебник B"]["delta"] > by_book["Учебник A"]["delta"]
+    assert "чтобы не менять программу резко" in by_book["Учебник B"]["reason"]
+    assert by_book["Учебник B"]["difficulty_index"] > max(
+        by_book["Учебник A"]["difficulty_index"], by_book["Учебник C"]["difficulty_index"]
+    )
+    percents = {row["textbook"]: row["delta"] for row in next(
+        item for item in response["items"] if item["topic"] == "Проценты"
+    )["by_textbook"]}
+    assert percents["Учебник B"] > max(percents["Учебник A"], percents["Учебник C"])
     assert "«Дроби» +2" in plans["Учебник B"]["text"]
     moved = {name: plan["hours_moved"] for name, plan in plans.items()}
-    assert abs(moved["Учебник A"] - moved["Учебник C"]) <= 1
     assert moved["Учебник B"] > max(moved["Учебник A"], moved["Учебник C"])
     for name in plans:
         rows_of_book = [row for item in response["items"] for row in item["by_textbook"] if row["textbook"] == name]

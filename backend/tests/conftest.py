@@ -14,3 +14,14 @@ def seeded_engine(tmp_path_factory):
     with Session(engine) as session:
         generate(session)
     return engine
+
+
+@pytest.fixture(scope="session")
+def independent_engine(tmp_path_factory):
+    """Те же демо-данные, но без зависимостей между темами."""
+    path = tmp_path_factory.mktemp("independent") / "test.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        generate(session, prerequisites={})
+    return engine
