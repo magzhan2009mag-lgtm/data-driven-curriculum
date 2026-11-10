@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import brentq
 from scipy.special import expit, logit
-from sqlalchemy import Engine, func, insert, inspect, select
+from sqlalchemy import Engine, func, insert, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
@@ -27,6 +27,8 @@ from app.models import (
 )
 
 SEED = 42
+# Меняется вместе с моделью данных: start.bat пересоздаёт БД, если версия в ней старше.
+DATA_VERSION = 2
 TESTS_PER_TOPIC = 2
 MIN_CLASS_SIZE = 23
 MAX_CLASS_SIZE = 27
@@ -76,6 +78,16 @@ ITEM_DIFFICULTY_SEED_OFFSET = 1
 ITEM_RESPONSE_SEED_OFFSET = 2
 PRETEST_SEED_OFFSET = 3
 ARCHIVE_SEED_OFFSET = 4
+MASTERY_SEED_OFFSET = 5
+
+# Освоение темы учеником сверх его общего уровня: одно значение на ученика и тему.
+MASTERY_SD = 8
+# Зависимая тема: (тема-основа, коэффициент). Пробел в основе переносится в балл зависимой темы.
+PREREQUISITES = {
+    "Проценты": (("Дроби", 0.6),),
+    "Десятичные дроби": (("Дроби", 0.5),),
+    "Уравнения": (("Отрицательные числа", 0.6),),
+}
 
 ITEMS_PER_TEST = 8
 ITEM_DIFFICULTY_SD = 0.8
@@ -192,10 +204,14 @@ def add_archive(session: Session, topics: list[Topic], rows: list[dict], student
     session.execute(insert(TopicYearStat), archive)
 
 
-def generate(session: Session, seed: int = SEED) -> None:
-    """Заполняет пустую БД. Один и тот же seed всегда даёт одни и те же данные."""
+def generate(session: Session, seed: int = SEED, prerequisites: dict = PREREQUISITES) -> None:
+    """Заполняет пустую БД. Один и тот же seed всегда даёт одни и те же данные.
+
+    prerequisites задаёт зависимости тем; без них освоение каждой темы влияет только на неё саму.
+    """
     rng = np.random.default_rng(seed)
     pretest_rng = np.random.default_rng(seed + PRETEST_SEED_OFFSET)
+    mastery_rng = np.random.default_rng(seed + MASTERY_SEED_OFFSET)
 
     subject = Subject(name="Математика")
     textbooks = {key: Textbook(name=f"Учебник {key}", subject=subject) for key in TEXTBOOKS}
@@ -223,7 +239,8 @@ def generate(session: Session, seed: int = SEED) -> None:
             for _ in range(int(rng.integers(MIN_CLASS_SIZE, MAX_CLASS_SIZE + 1))):
                 student_no += 1
                 student_effect = rng.normal(0, STUDENT_SD)
-                pretest = PRETEST_BASE + school_effect + student_effect + pretest_rng.normal(0, PRETEST_NOISE_SD)
+                mastery = dict(zip(bases, mastery_rng.normal(0, MASTERY_SD, len(TOPICS))))
+                pretest =PRETEST_BASE + school_effect + student_effect + pretest_rng.normal(0, PRETEST_NOISE_SD)
                 student = Student(
                     name=f"Ученик {student_no:03d}",
                     school_class=school_class,
@@ -244,6 +261,8 @@ def generate(session: Session, seed: int = SEED) -> None:
                         + class_effect
                         + student_effect
                         + textbook_effect(textbook_key, topic_name)
+                        + mastery[topic_name]
+                        + sum(weight * mastery[base] for base, weight in prerequisites.get(topic_name, ()))
                         + noise
                     )
                     if (school_no, class_name, topic_name) == ANOMALY:
@@ -261,11 +280,19 @@ def generate(session: Session, seed: int = SEED) -> None:
     session.execute(insert(TestResult), rows)
     add_items(session, tests, rows, seed)
     add_archive(session, topics, rows, student_school, seed)
+    mark_version(session)
     session.commit()
 
 
+def mark_version(session: Session) -> None:
+    session.execute(text(f"PRAGMA user_version = {DATA_VERSION}"))
+
+
 def is_outdated(target: Engine) -> bool:
-    """Проверяет, что в БД есть все таблицы и столбцы текущих моделей."""
+    """Проверяет, что в БД есть все таблицы и столбцы текущих моделей и данные текущей версии."""
+    with target.connect() as connection:
+        if connection.execute(text("PRAGMA user_version")).scalar() != DATA_VERSION:
+            return True
     inspector = inspect(target)
     for table in Base.metadata.sorted_tables:
         if not inspector.has_table(table.name):

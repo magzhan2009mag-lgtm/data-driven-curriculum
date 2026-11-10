@@ -17,14 +17,23 @@ from app.models import (
     Topic,
     TopicYearStat,
 )
-from scripts.seed import ARCHIVE_YEARS, ITEMS_PER_TEST, generate, is_outdated, load_summary
+from scripts.seed import (
+    ARCHIVE_YEARS,
+    DATA_VERSION,
+    ITEMS_PER_TEST,
+    PREREQUISITES,
+    generate,
+    is_outdated,
+    load_summary,
+    mark_version,
+)
 
 
-def seeded_session(path) -> Session:
+def seeded_session(path, **options) -> Session:
     engine = create_engine(f"sqlite:///{path.as_posix()}")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    generate(session)
+    generate(session, **options)
     return session
 
 
@@ -110,6 +119,9 @@ def test_archive_covers_every_school_topic_and_year(session):
 def test_old_schema_is_outdated(tmp_path):
     engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
     Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        mark_version(db)
+        db.commit()
     assert is_outdated(engine) is False
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE students DROP COLUMN pretest_score"))
@@ -118,6 +130,45 @@ def test_old_schema_is_outdated(tmp_path):
 
 def test_empty_database_is_outdated(tmp_path):
     assert is_outdated(create_engine(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")) is True
+
+
+def test_old_data_version_is_outdated(tmp_path):
+    # Схема та же, но данные созданы прежней версией генератора: start.bat должен их пересоздать.
+    engine = create_engine(f"sqlite:///{(tmp_path / 'previous.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text(f"PRAGMA user_version = {DATA_VERSION - 1}"))
+    assert is_outdated(engine) is True
+
+
+def test_generated_database_is_current(session):
+    assert is_outdated(session.get_bind()) is False
+
+
+def scores_by_topic(db: Session) -> pd.DataFrame:
+    query = (
+        select(Topic.name.label("topic"), TestResult.test_id, TestResult.student_id, TestResult.score)
+        .join(Topic, TestResult.topic_id == Topic.id)
+        .order_by(TestResult.test_id, TestResult.student_id)
+    )
+    return pd.DataFrame(db.execute(query).mappings().all())
+
+
+def test_prerequisites_change_only_dependent_topics(session, tmp_path):
+    with seeded_session(tmp_path / "independent.db", prerequisites={}) as independent:
+        planted = scores_by_topic(session)
+        plain = scores_by_topic(independent)
+    # Освоение тем идёт из отдельного генератора, поэтому без зависимостей остальные баллы те же.
+    dependent = planted["topic"].isin(PREREQUISITES)
+    assert planted[~dependent].equals(plain[~dependent])
+    assert not planted.loc[dependent, "score"].equals(plain.loc[dependent, "score"])
+
+    def correlation(frame: pd.DataFrame, first: str, second: str) -> float:
+        by_student = frame.groupby(["student_id", "topic"])["score"].mean().unstack()
+        return by_student[first].corr(by_student[second])
+
+    # Пробел в «Дробях» переходит в «Проценты»: связь тем становится заметно сильнее.
+    assert correlation(planted, "Дроби", "Проценты") > correlation(plain, "Дроби", "Проценты") + 0.05
 
 
 def test_scores_are_within_bounds(session):
@@ -179,5 +230,8 @@ def test_anomalous_class_fails_one_topic(session):
     school_no, class_name, topic = ANOMALY
     results = load_results(session)
     in_school = results[results["school"] == f"Школа №{school_no}"]
-    by_class = in_school[in_school["topic"] == topic].groupby("class")["score"].mean()
-    assert by_class[class_name] < by_class.drop(class_name).min() - 5
+    on_topic = in_school[in_school["topic"] == topic].groupby("class")["score"].mean()
+    elsewhere = in_school[in_school["topic"] != topic].groupby("class")["score"].mean()
+    # Провал темы относительно остальных тем того же класса: у 6Д он заметно глубже, чем у соседей.
+    dip = on_topic - elsewhere
+    assert dip[class_name] < dip.drop(class_name).min() - 5
