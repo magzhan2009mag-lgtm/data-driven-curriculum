@@ -73,7 +73,7 @@ def class_table(levels: list[float], dip: dict[tuple[int, int], float] | None = 
         for topic_id, base in topic_bases.items():
             cell = level + base + rng.normal(0, 1) + dip.get((class_id, topic_id), 0)
             for offset in (-4, 0, 4):
-                rows.append({"class_id": class_id, "class": f"6-{class_id}", "school": "Школа №1",
+                rows.append({"class_id": class_id, "class": f"6-{class_id}", "school_id": 1, "school": "Школа №1",
                              "textbook": "A", "topic_id": topic_id, "topic": f"Тема {topic_id}",
                              "score": cell + offset})
     return pd.DataFrame(rows)

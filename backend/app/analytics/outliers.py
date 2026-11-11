@@ -61,7 +61,7 @@ def describe(item: dict) -> str:
 
 def class_outliers(results: pd.DataFrame) -> dict:
     """Ищет пары «класс × тема», результат которых не объясняется уровнем класса и учебником."""
-    cells = results.groupby(["class_id", "class", "school", "textbook", "topic_id", "topic"], as_index=False).agg(
+    cells = results.groupby(["class_id", "class", "school_id", "school", "textbook", "topic_id", "topic"], as_index=False).agg(
         avg_score=("score", "mean"), n=("score", "size")
     )
     n_classes = int(cells["class_id"].nunique())
@@ -89,6 +89,7 @@ def class_outliers(results: pd.DataFrame) -> dict:
         item = {
             "class_id": int(row["class_id"]),
             "class": row["class"],
+            "school_id": int(row["school_id"]),
             "school": row["school"],
             "textbook": row["textbook"],
             "topic_id": int(row["topic_id"]),

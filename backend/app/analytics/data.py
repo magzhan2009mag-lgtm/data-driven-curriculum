@@ -76,8 +76,8 @@ def read_results(session: Session) -> pd.DataFrame:
     return pd.DataFrame(session.execute(query).mappings().all(), columns=RESULT_COLUMNS)
 
 
-def load_item_responses(session: Session, topic_id: int) -> pd.DataFrame:
-    """Возвращает по строке на ответ ученика на задание одной темы."""
+def load_item_responses(session: Session, topic_id: int, school_id: int | None = None) -> pd.DataFrame:
+    """Возвращает по строке на ответ ученика на задание одной темы, при school_id — только учеников школы."""
     columns = ["topic", "test_id", "test_number", "item_id", "item_number", "student_id", "correct"]
     query = (
         select(
@@ -94,6 +94,12 @@ def load_item_responses(session: Session, topic_id: int) -> pd.DataFrame:
         .join(Topic, Test.topic_id == Topic.id)
         .where(Topic.id == topic_id)
     )
+    if school_id is not None:
+        query = (
+            query.join(Student, ItemResponse.student_id == Student.id)
+            .join(SchoolClass, Student.class_id == SchoolClass.id)
+            .where(SchoolClass.school_id == school_id)
+        )
     return pd.DataFrame(session.execute(query).mappings().all(), columns=columns)
 
 

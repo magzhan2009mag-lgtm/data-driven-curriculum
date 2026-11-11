@@ -45,7 +45,10 @@ def build_facts(items: list[dict]) -> list[dict]:
     for item in items:
         fact = {field: item[field] for field in fields}
         if "by_textbook" in item:
-            fact["by_textbook"] = [{field: row[field] for field in textbook_fields} for row in item["by_textbook"]]
+            # Учебник без отдельного плана (мало данных в одной школе) в запрос не идёт: чисел у него нет.
+            fact["by_textbook"] = [
+                {field: row[field] for field in textbook_fields} for row in item["by_textbook"] if row["delta"] is not None
+            ]
         facts.append(fact)
     return facts
 

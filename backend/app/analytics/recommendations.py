@@ -6,8 +6,8 @@ import pandas as pd
 from scipy.optimize import linprog
 
 from app.analytics.difficulty import HARD_FROM, topic_difficulty
-from app.analytics.prerequisites import ROOT_LEVELS, dependents_phrase, root_dependents, topic_prerequisites
-from app.analytics.textbooks import adjust_for_school
+from app.analytics.prerequisites import ROOT_LEVELS, dependents_phrase, plural, root_dependents, topic_prerequisites
+from app.analytics.textbooks import MIN_STUDENTS, adjust_for_school
 
 # Корень проблемы: тема → названия тем, которые от неё зависят.
 Roots = dict[int, list[str]]
@@ -209,19 +209,38 @@ def plan_text(textbook: str, added: list[dict]) -> str:
     return f"{textbook}: добавить часы на {topics}."
 
 
-def recommend_by_textbook(results: pd.DataFrame) -> dict:
+def not_enough_text(textbook: str, count: int, school: str) -> str:
+    students = plural(count, "ученик", "ученика", "учеников")
+    return (
+        f"{textbook}: в {school.replace('Школа', 'Школе', 1)} всего {count} {students}, "
+        "этого мало для отдельного плана. Смотрите план по всем школам."
+    )
+
+
+def recommend_by_textbook(results: pd.DataFrame, roots: Roots | None = None, school: str | None = None) -> dict:
     """Общий план плюс отдельный план для классов каждого учебника.
 
     Общий план считается по сырым баллам. Планы учебников считаются по баллам с поправкой на школу,
     как если бы все учебники проходили в одинаковых школах: иначе учебник, который чаще выбирают
     сильные школы, выглядел бы лучше, чем есть. У каждого учебника свой перенос часов,
-    и сумма часов в каждом плане не меняется. Корни проблемы общие для всех планов.
+    и сумма часов в каждом плане не меняется. Корни проблемы общие для всех планов: без roots
+    они считаются по тем же результатам. В одной школе (school) учебник, у которого меньше
+    MIN_STUDENTS учеников, отдельного плана не получает: по 1–2 классам вывод был бы случайным.
     """
-    roots = root_dependents(topic_prerequisites(results))
+    if roots is None:
+        roots = root_dependents(topic_prerequisites(results))
     response = recommend_hours(topic_difficulty(results), roots)
     breakdown = {item["topic_id"]: [] for item in response["items"]}
     plans = []
+    students = results.groupby("textbook")["student_id"].nunique()
     for textbook, group in adjust_for_school(results).groupby("textbook"):
+        if school is not None and students[textbook] < MIN_STUDENTS:
+            reason = not_enough_text(textbook, int(students[textbook]), school)
+            for rows in breakdown.values():
+                rows.append({"textbook": textbook, "level": None, "avg_score": None, "fail_rate": None,
+                             "difficulty_index": None, "hours_recommended": None, "delta": None, "reason": reason})
+            plans.append({"textbook": textbook, "hours_moved": 0, "added": [], "text": reason, "enough_data": False})
+            continue
         topics = topic_difficulty(group)
         deltas = redistribute(topics, roots)
         added = []
@@ -248,6 +267,7 @@ def recommend_by_textbook(results: pd.DataFrame) -> dict:
                 "hours_moved": sum(item["delta"] for item in added),
                 "added": added,
                 "text": plan_text(textbook, added),
+                "enough_data": True,
             }
         )
 
