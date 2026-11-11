@@ -5,7 +5,8 @@ import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
 import { Term } from "@/components/term";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getComparison, getRegression, getTopics } from "@/lib/api";
+import { TextbookDecisions } from "@/components/textbook-decisions";
+import { getComparison, getDecisions, getRegression, getTopics } from "@/lib/api";
 import { formatIndex, formatP, formatScore, formatSigned } from "@/lib/format";
 import { inSchool, schoolHref } from "@/lib/school";
 import { readScope } from "@/lib/scope";
@@ -31,10 +32,11 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
   const { topic_id: rawId } = await searchParams;
   const topicId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : undefined;
   const { school, selected } = await readScope(searchParams);
-  const [topics, comparison, regression] = await Promise.all([
+  const [topics, comparison, regression, decisions] = await Promise.all([
     getTopics(school),
     getComparison(topicId, school),
     getRegression(topicId, school),
+    getDecisions(school),
   ]);
   const topicPath = topicId === undefined ? "/textbooks" : `/textbooks?topic_id=${topicId}`;
   if (!comparison) notFound();
@@ -42,11 +44,20 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
 
   return (
     <div className="space-y-10">
+      {decisions && (
+        <section>
+          {selected && <p className="mb-1 text-lg text-muted-foreground">{selected.school}</p>}
+          <h1 id="decisions-title" className="text-3xl leading-tight font-semibold sm:text-4xl">
+            Что решить по учебникам
+          </h1>
+          <TextbookDecisions data={decisions} school={school} titleId="decisions-title" />
+        </section>
+      )}
+
       <section>
-        <h1 className="text-3xl leading-tight font-semibold sm:text-4xl">
+        <h2 className="text-2xl leading-tight font-semibold">
           Сравнение учебников: {comparison.topic ? `«${comparison.topic}»` : "все темы"}
-        </h1>
-        {selected && <p className="mt-1 text-lg text-muted-foreground">{selected.school}</p>}
+        </h2>
         {comparison.school_note ? (
           <div className="mt-4 max-w-prose border-l-2 border-primary pl-4">
             <p className="text-lg">{comparison.school_note}</p>

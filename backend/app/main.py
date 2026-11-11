@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.analytics.clusters import cluster_schools, cluster_topics
+from app.analytics.decisions import textbook_decisions
 from app.analytics.data import load_item_responses, load_results, load_students, load_year_stats
 from app.analytics.difficulty import topic_difficulty
 from app.analytics.explain import explain_recommendations
@@ -23,6 +24,7 @@ from app.analytics.schools import (
     add_all_schools_to_topics,
     add_classes_to_topics,
     few_students,
+    in_school,
     list_schools,
     only_school,
     roots_in_school,
@@ -83,6 +85,16 @@ def hours_for(scope: Scope, prerequisites: dict | None = None) -> dict:
     return response
 
 
+def decisions_for(scope: Scope, comparison: dict | None = None) -> dict:
+    """Решения по учебникам. В школе, где у какого-то учебника мало учеников, — по всем школам."""
+    if scope.filtered:
+        comparison = comparison or compare_textbooks(scope.results)
+        if any(not book["enough_data"] for book in comparison["textbooks"]):
+            note = f"{in_school(scope.school)} у учебников мало учеников, поэтому решение по всем школам."
+            return textbook_decisions(scope.all_results, all_schools=True, note=note)
+    return textbook_decisions(scope.results)
+
+
 @app.get("/schools")
 def get_schools(db: Session = Depends(get_db)) -> list[dict]:
     return list_schools(load_results(db))
@@ -121,6 +133,7 @@ def get_summary(scope: Scope = Depends(get_scope)) -> dict:
         prerequisites,
         scope.school,
         set(roots_for(scope, prerequisites)[0]),
+        decisions_for(scope, comparison),
     )
 
 
@@ -134,6 +147,12 @@ def get_textbooks_compare(topic_id: int | None = None, scope: Scope = Depends(ge
         few = {book["name"]: book["n_students"] for book in response["textbooks"] if book["n_students"] < MIN_STUDENTS}
         response["school_note"] = school_note(scope.school, few)
     return response
+
+
+@app.get("/textbooks/decisions")
+def get_textbooks_decisions(scope: Scope = Depends(get_scope)) -> dict:
+    """«Что решить по учебникам»: для каждого учебника где он значимо слабее, где сильнее, с кем равноценен."""
+    return decisions_for(scope)
 
 
 @app.get("/textbooks/regression")

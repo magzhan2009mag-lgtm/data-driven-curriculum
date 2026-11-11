@@ -204,10 +204,14 @@ def add_archive(session: Session, topics: list[Topic], rows: list[dict], student
     session.execute(insert(TopicYearStat), archive)
 
 
-def generate(session: Session, seed: int = SEED, prerequisites: dict = PREREQUISITES) -> None:
+def generate(
+    session: Session, seed: int = SEED, prerequisites: dict = PREREQUISITES, textbook_effects: bool = True
+) -> None:
     """Заполняет пустую БД. Один и тот же seed всегда даёт одни и те же данные.
 
     prerequisites задаёт зависимости тем; без них освоение каждой темы влияет только на неё саму.
+    textbook_effects=False убирает вклад учебников: все учебники учат одинаково, остаётся только
+    неравномерный выбор учебников школами. Последовательность случайных чисел от флагов не зависит.
     """
     rng = np.random.default_rng(seed)
     pretest_rng = np.random.default_rng(seed + PRETEST_SEED_OFFSET)
@@ -260,7 +264,7 @@ def generate(session: Session, seed: int = SEED, prerequisites: dict = PREREQUIS
                         + school_effect
                         + class_effect
                         + student_effect
-                        + textbook_effect(textbook_key, topic_name)
+                        + (textbook_effect(textbook_key, topic_name) if textbook_effects else 0)
                         + mastery[topic_name]
                         + sum(weight * mastery[base] for base, weight in prerequisites.get(topic_name, ()))
                         + noise

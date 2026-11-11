@@ -42,6 +42,7 @@ export function SummaryCards({ cards, school }: { cards: SummaryCard[]; school?:
               <Value card={card} />
               {card.headline && <span className="mt-3 font-medium">{card.headline}</span>}
               <span className="mt-1 text-sm text-muted-foreground">{card.text}</span>
+              {card.advice && <span className="mt-2 text-sm font-medium">{card.advice}</span>}
             </Link>
           </li>
         ))}

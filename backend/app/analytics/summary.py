@@ -19,10 +19,11 @@ def letter(textbook: str) -> str:
 
 
 def card(kind: str, label: str, text: str, path: str, *, headline: str | None = None, value: float | None = None,
-         unit: str | None = None, value_all: float | None = None, all_schools: bool = False) -> dict:
+         unit: str | None = None, value_all: float | None = None, all_schools: bool = False,
+         advice: str | None = None) -> dict:
     """Карточка-вывод. unit: score (балл из 100) или hours (часы); value_all — то же по всем школам."""
     return {"kind": kind, "label": label, "headline": headline, "value": value, "unit": unit,
-            "value_all": value_all, "text": text, "path": path, "all_schools": all_schools}
+            "value_all": value_all, "text": text, "path": path, "all_schools": all_schools, "advice": advice}
 
 
 def hardest_topic_card(topics: list[dict]) -> dict:
@@ -44,7 +45,7 @@ def pair_verdict(pair: dict | None) -> str:
     return "разница не подтверждается"
 
 
-def weakest_textbook_card(comparison: dict, overall: dict, school: str | None) -> dict:
+def weakest_textbook_card(comparison: dict, overall: dict, school: str | None, decisions: dict | None = None) -> dict:
     """Самый слабый учебник по баллу «в одинаковых школах».
 
     В одной школе, где у какого-то учебника мало учеников, сравнение берётся по всем школам
@@ -64,9 +65,11 @@ def weakest_textbook_card(comparison: dict, overall: dict, school: str | None) -
             f"у учебника {letter(best['name'])}: {pair_verdict(pair)}.")
     if use_overall:
         text = f"{in_school(school)} учеников мало, поэтому вывод по всем школам. {text}"
+    decision = next((item for item in (decisions or {}).get("textbooks", []) if item["textbook"] == weakest["name"]), None)
     return card("weakest_textbook", "Самый слабый учебник", text, "/textbooks", headline=weakest["name"],
                 value=weakest["adjusted_score"], unit="score",
-                value_all=None if use_overall else weakest.get("adjusted_score_all"), all_schools=use_overall)
+                value_all=None if use_overall else weakest.get("adjusted_score_all"), all_schools=use_overall,
+                advice=decision["short_advice"] if decision else None)
 
 
 def hours_card(hours: dict) -> dict:
@@ -107,11 +110,12 @@ def finding_card(outliers: dict, prerequisites: dict, topics: list[dict], school
 
 
 def build_summary(topics: list[dict], comparison: dict, overall: dict, hours: dict, outliers: dict,
-                  prerequisites: dict, school: str | None, active_roots: set[int] | None = None) -> dict:
+                  prerequisites: dict, school: str | None, active_roots: set[int] | None = None,
+                  decisions: dict | None = None) -> dict:
     return {
         "cards": [
             hardest_topic_card(topics),
-            weakest_textbook_card(comparison, overall, school),
+            weakest_textbook_card(comparison, overall, school, decisions),
             hours_card(hours),
             finding_card(outliers, prerequisites, topics, school, active_roots),
         ]

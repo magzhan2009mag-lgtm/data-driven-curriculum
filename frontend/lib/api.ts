@@ -169,6 +169,35 @@ export type Regression = {
   conclusion: string;
 };
 
+export type TextbookGap = {
+  topic_id: number;
+  topic: string;
+  stronger: string;
+  weaker: string;
+  points: number;
+  p_adjusted: number;
+  cohens_d: number;
+  effect: string;
+};
+
+/** «Что решить по учебникам»: строка-вывод и совет для каждого учебника. */
+export type Decisions = {
+  all_schools: boolean;
+  note: string | null;
+  n_topics: number;
+  textbooks: {
+    textbook: string;
+    verdict: "replace" | "strengthen" | "strong" | "equal";
+    weaker: TextbookGap[];
+    stronger: TextbookGap[];
+    equivalent: { textbook: string; except_topics: string[] }[];
+    alternatives: string[];
+    text: string;
+    advice: string | null;
+    short_advice: string | null;
+  }[];
+};
+
 /** Карточка «Главное за минуту». unit: score — балл из 100, hours — часы. */
 export type SummaryCard = {
   kind: "hardest_topic" | "weakest_textbook" | "hours" | "outlier" | "root";
@@ -180,6 +209,7 @@ export type SummaryCard = {
   text: string;
   path: string;
   all_schools: boolean;
+  advice: string | null;
 };
 
 async function request<T>(path: string): Promise<T | null> {
@@ -209,6 +239,10 @@ export async function getSummary(school?: number): Promise<SummaryCard[]> {
 
 export async function getTopics(school?: number): Promise<TopicDifficulty[]> {
   return (await request<TopicDifficulty[]>(apiPath("/topics/difficulty", { school_id: school }))) ?? [];
+}
+
+export function getDecisions(school?: number): Promise<Decisions | null> {
+  return request<Decisions>(apiPath("/textbooks/decisions", { school_id: school }));
 }
 
 export function getComparison(topicId?: number, school?: number): Promise<Comparison | null> {
