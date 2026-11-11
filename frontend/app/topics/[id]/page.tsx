@@ -4,7 +4,9 @@ import { AllSchools } from "@/components/all-schools";
 import { ItemIssues } from "@/components/item-issues";
 import { LevelMark } from "@/components/level-mark";
 import { ScoreDistribution } from "@/components/score-distribution";
+import { Term } from "@/components/term";
 import { TopicLinks } from "@/components/topic-links";
+import { TopicSwitcher } from "@/components/topic-switcher";
 import { TrendSparkline } from "@/components/trend-sparkline";
 import { getItemQuality, getPrerequisites, getRecommendations, getTopics, getTrends } from "@/lib/api";
 import { formatHours, formatIndex, formatPercent, formatScore, scoreBandClass } from "@/lib/format";
@@ -28,16 +30,23 @@ export default async function TopicPage({ params, searchParams }: PageProps<"/to
   const recommendation = recommendations.items.find((item) => item.topic_id === topic.topic_id);
   const trend = trends.find((item) => item.topic_id === topic.topic_id);
   const itemQuality = await getItemQuality(topic.topic_id, school);
+  // Номер темы и есть её место в программе: API отдаёт темы от сложной к лёгкой, здесь нужен порядок программы.
+  const programOrder = topics
+    .map(({ topic_id, topic: name }) => ({ topic_id, topic: name }))
+    .sort((a, b) => a.topic_id - b.topic_id);
 
   return (
     <div className="space-y-12">
       <section>
-        <Link
-          href={schoolHref("/", school)}
-          className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-        >
-          Все темы
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <Link
+            href={schoolHref("/", school)}
+            className="rounded-sm text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            Все темы
+          </Link>
+          <TopicSwitcher topics={programOrder} current={topic.topic_id} school={school} />
+        </div>
         <h1 className="mt-3 text-3xl leading-tight font-semibold sm:text-4xl">{topic.topic}</h1>
         {selected && <p className="mt-1 text-lg text-muted-foreground">{selected.school}</p>}
         <div className="mt-6 flex flex-wrap items-end gap-x-10 gap-y-4 tabular-nums">
@@ -57,7 +66,9 @@ export default async function TopicPage({ params, searchParams }: PageProps<"/to
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Индекс сложности</dt>
+              <dt className="text-muted-foreground">
+                <Term term="difficulty_index">Индекс сложности</Term>
+              </dt>
               <dd className="mt-0.5 text-lg font-medium">
                 {formatIndex(topic.difficulty_index)}
                 <AllSchools value={topic.difficulty_index_all} format={formatIndex} className="text-sm" />

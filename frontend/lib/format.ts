@@ -20,8 +20,12 @@ export const formatP = (value: number) => (value < 0.001 ? "< 0,001" : threeDeci
 
 const HOUR_FORMS: Partial<Record<Intl.LDMLPluralRule, string>> = { one: "час", few: "часа", many: "часов" };
 
+export function hoursWord(count: number): string {
+  return HOUR_FORMS[plural.select(count)] ?? "часа";
+}
+
 export function formatHours(count: number): string {
-  return `${count} ${HOUR_FORMS[plural.select(count)] ?? "часа"}`;
+  return `${count} ${hoursWord(count)}`;
 }
 
 export const LEVEL_LABELS: Record<Level, string> = {

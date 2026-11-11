@@ -169,6 +169,19 @@ export type Regression = {
   conclusion: string;
 };
 
+/** Карточка «Главное за минуту». unit: score — балл из 100, hours — часы. */
+export type SummaryCard = {
+  kind: "hardest_topic" | "weakest_textbook" | "hours" | "outlier" | "root";
+  label: string;
+  headline: string | null;
+  value: number | null;
+  unit: "score" | "hours" | null;
+  value_all: number | null;
+  text: string;
+  path: string;
+  all_schools: boolean;
+};
+
 async function request<T>(path: string): Promise<T | null> {
   const response = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (response.status === 404) return null;
@@ -188,6 +201,10 @@ function apiPath(path: string, params: Record<string, number | undefined>): stri
 
 export async function getSchools(): Promise<School[]> {
   return (await request<School[]>("/schools")) ?? [];
+}
+
+export async function getSummary(school?: number): Promise<SummaryCard[]> {
+  return (await request<{ cards: SummaryCard[] }>(apiPath("/summary", { school_id: school })))?.cards ?? [];
 }
 
 export async function getTopics(school?: number): Promise<TopicDifficulty[]> {

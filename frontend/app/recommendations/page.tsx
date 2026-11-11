@@ -6,6 +6,7 @@ import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
 import { HoursMatrix } from "@/components/hours-matrix";
 import { LevelMark } from "@/components/level-mark";
+import { Term } from "@/components/term";
 import { getRecommendations, type Recommendations } from "@/lib/api";
 import { formatHours } from "@/lib/format";
 import { inSchool, schoolHref } from "@/lib/school";
@@ -108,7 +109,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps<"/
         </ul>
         {!selected && (
           <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-            Учебники сравниваются так, будто они проходят в одинаковых школах.
+            Учебники сравниваются так, будто они проходят <Term term="same_schools">в одинаковых школах</Term>.
           </p>
         )}
         <p className="mt-4 max-w-prose tabular-nums">
@@ -118,7 +119,7 @@ export default async function RecommendationsPage({ searchParams }: PageProps<"/
         </p>
         <p className="mt-3 max-w-prose text-sm text-muted-foreground">
           Часы переносятся с лёгких тем на сложные, сумма в программе не меняется: {formatHours(total_hours)}. Чем
-          сложнее тема, тем больше часов она получает; корень проблемы, от которого зависят сложные темы, получает ещё
+          сложнее тема, тем больше часов она получает; <Term term="root">корень проблемы</Term>, от которого зависят сложные темы, получает ещё
           час. За раз тема меняется не больше чем на 30% плана (но всегда можно на 2 часа). Рекомендация основана на
           результатах тестов и не гарантирует рост баллов.
         </p>

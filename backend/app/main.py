@@ -28,6 +28,7 @@ from app.analytics.schools import (
     outliers_for_school,
     school_note,
 )
+from app.analytics.summary import build_summary
 from app.analytics.textbooks import MIN_STUDENTS, compare_textbooks
 from app.analytics.trends import topic_trends
 from app.database import SessionLocal
@@ -65,8 +66,8 @@ def all_school_roots(scope: Scope) -> dict[int, list[str]]:
     return root_dependents(topic_prerequisites(scope.all_results))
 
 
-def hours_for(scope: Scope) -> dict:
-    roots = all_school_roots(scope)
+def hours_for(scope: Scope, roots: dict[int, list[str]] | None = None) -> dict:
+    roots = all_school_roots(scope) if roots is None else roots
     response = recommend_by_textbook(scope.results, roots, scope.school)
     if scope.filtered:
         add_all_schools_to_hours(response, recommend_hours(topic_difficulty(scope.all_results), roots))
@@ -78,13 +79,39 @@ def get_schools(db: Session = Depends(get_db)) -> list[dict]:
     return list_schools(load_results(db))
 
 
-@app.get("/topics/difficulty")
-def get_topics_difficulty(scope: Scope = Depends(get_scope)) -> list[dict]:
+def topics_for(scope: Scope) -> list[dict]:
     topics = topic_difficulty(scope.results)
     if scope.filtered:
         add_all_schools_to_topics(topics, topic_difficulty(scope.all_results))
         add_classes_to_topics(topics, scope.results)
     return topics
+
+
+def outliers_for(scope: Scope) -> dict:
+    response = class_outliers(scope.all_results)
+    return outliers_for_school(response, scope.school_id, scope.school) if scope.filtered else response
+
+
+@app.get("/topics/difficulty")
+def get_topics_difficulty(scope: Scope = Depends(get_scope)) -> list[dict]:
+    return topics_for(scope)
+
+
+@app.get("/summary")
+def get_summary(scope: Scope = Depends(get_scope)) -> dict:
+    """«Главное за минуту»: самая сложная тема, самый слабый учебник, перенос часов, необычный класс или корень."""
+    prerequisites = topic_prerequisites(scope.all_results)
+    comparison = compare_textbooks(scope.results)
+    overall = compare_textbooks(scope.all_results) if scope.filtered else comparison
+    return build_summary(
+        topics_for(scope),
+        comparison,
+        overall,
+        hours_for(scope, root_dependents(prerequisites)),
+        outliers_for(scope),
+        prerequisites,
+        scope.school,
+    )
 
 
 @app.get("/textbooks/compare")
@@ -158,8 +185,7 @@ def get_clusters(scope: Scope = Depends(get_scope)) -> dict:
 
 @app.get("/classes/outliers")
 def get_class_outliers(scope: Scope = Depends(get_scope)) -> dict:
-    response = class_outliers(scope.all_results)
-    return outliers_for_school(response, scope.school_id, scope.school) if scope.filtered else response
+    return outliers_for(scope)
 
 
 @app.get("/items/quality")

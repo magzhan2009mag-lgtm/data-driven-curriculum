@@ -1,4 +1,5 @@
 import { PrerequisiteMap } from "@/components/prerequisite-map";
+import { Term } from "@/components/term";
 import type { Prerequisites } from "@/lib/api";
 
 /** Темы, слабое освоение которых тянет за собой провал следующих тем. */
@@ -8,7 +9,7 @@ export function RootCauses({ data, school }: { data: Prerequisites | null; schoo
   return (
     <section aria-labelledby="roots-title">
       <h2 id="roots-title" className="text-xl font-semibold">
-        Корень проблемы
+        <Term term="root">Корень проблемы</Term>
       </h2>
       {data.scope_note && <p className="mt-1 max-w-prose text-sm text-muted-foreground">{data.scope_note}</p>}
       {data.links.length === 0 ? (

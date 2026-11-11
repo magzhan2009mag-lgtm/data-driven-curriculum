@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
+import { Term } from "@/components/term";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getComparison, getRegression, getTopics } from "@/lib/api";
 import { formatIndex, formatP, formatScore, formatSigned } from "@/lib/format";
@@ -96,7 +97,7 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
               <div>
                 <p className="text-4xl font-semibold">{formatScore(book.adjusted_score)}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {selected ? `в ${inSchool(selected.school)}` : "в одинаковых школах"}
+                  {selected ? `в ${inSchool(selected.school)}` : <Term term="same_schools" className="whitespace-nowrap">в одинаковых школах</Term>}
                 </p>
               </div>
               {/* В одной школе балл «в этой школе» и простое среднее совпадают: второе не показываем. */}
@@ -130,8 +131,12 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
           <TableHeader>
             <TableRow>
               <TableHead>Пара учебников</TableHead>
-              <TableHead>Разница</TableHead>
-              <TableHead>Размер эффекта</TableHead>
+              <TableHead>
+                <Term term="significant">Разница</Term>
+              </TableHead>
+              <TableHead>
+                <Term term="effect_size">Размер эффекта</Term>
+              </TableHead>
               <TableHead className="text-right">d Коэна</TableHead>
               <TableHead className="text-right">p с поправкой</TableHead>
             </TableRow>
