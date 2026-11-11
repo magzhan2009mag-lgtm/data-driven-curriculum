@@ -235,3 +235,20 @@ def test_anomalous_class_fails_one_topic(session):
     # Провал темы относительно остальных тем того же класса: у 6Д он заметно глубже, чем у соседей.
     dip = on_topic - elsewhere
     assert dip[class_name] < dip.drop(class_name).min() - 5
+
+
+def test_pattern_flags_keep_random_sequence(session, tmp_path):
+    """Без закономерностей меняются только заложенные места: остальные баллы те же, что в демо-данных."""
+    options = {"textbook_effects": False, "anomaly": False, "bad_items": False, "trends": False}
+    with seeded_session(tmp_path / "plain.db", **options) as plain:
+        planted = scores_by_topic(session)
+        flat = scores_by_topic(plain)
+        textbooks = dict(session.execute(select(TestResult.student_id, TestResult.textbook_id)).all())
+        names = dict(session.execute(select(Textbook.id, Textbook.name)).all())
+        planted_responses = session.execute(select(func.count(ItemResponse.id))).scalar_one()
+        plain_responses = plain.execute(select(func.count(ItemResponse.id))).scalar_one()
+    assert len(planted) == len(flat) and planted_responses == plain_responses
+    # Учебник A в генераторе без эффекта: его ученики (кроме класса с провалом темы) получают те же баллы.
+    textbook_a = planted["student_id"].map(textbooks).map(names) == "Учебник A"
+    assert planted.loc[textbook_a, "score"].equals(flat.loc[textbook_a, "score"])
+    assert not planted["score"].equals(flat["score"])

@@ -144,7 +144,7 @@ def calibration_shift(ability: np.ndarray, difficulties: np.ndarray, scores: np.
     return shift
 
 
-def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) -> None:
+def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int, bad_items: set = BAD_ITEMS) -> None:
     """Создаёт задания и ответы так, чтобы доля верных ответов соответствовала баллу за тест."""
     rng = np.random.default_rng(seed + ITEM_RESPONSE_SEED_OFFSET)
     items = [[Item(test_id=test.id, number=n + 1) for n in range(ITEMS_PER_TEST)] for test in tests]
@@ -153,7 +153,7 @@ def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) 
 
     item_ids = np.array([[item.id for item in test_items] for test_items in items])
     is_bad = np.array(
-        [[(test.topic.name, test.number, n + 1) in BAD_ITEMS for n in range(ITEMS_PER_TEST)] for test in tests]
+        [[(test.topic.name, test.number, n + 1) in bad_items for n in range(ITEMS_PER_TEST)] for test in tests]
     )
     test_position = {test.id: position for position, test in enumerate(tests)}
 
@@ -180,7 +180,10 @@ def add_items(session: Session, tests: list[Test], rows: list[dict], seed: int) 
     session.execute(insert(ItemResponse), responses)
 
 
-def add_archive(session: Session, topics: list[Topic], rows: list[dict], student_school: dict[int, int], seed: int) -> None:
+def add_archive(
+    session: Session, topics: list[Topic], rows: list[dict], student_school: dict[int, int], seed: int,
+    yearly_trend: dict = YEARLY_TREND,
+) -> None:
     """Создаёт средние прошлых лет от текущего среднего школы по теме."""
     rng = np.random.default_rng(seed + ARCHIVE_SEED_OFFSET)
     names = {topic.id: topic.name for topic in topics}
@@ -189,7 +192,7 @@ def add_archive(session: Session, topics: list[Topic], rows: list[dict], student
 
     archive = []
     for (school_id, topic_id), current in results.groupby(["school_id", "topic_id"])["score"].mean().items():
-        trend = YEARLY_TREND.get(names[topic_id], 0)
+        trend = yearly_trend.get(names[topic_id], 0)
         for year in ARCHIVE_YEARS:
             value = current - trend * (CURRENT_YEAR - year) + rng.normal(0, ARCHIVE_NOISE_SD)
             archive.append(
@@ -205,13 +208,21 @@ def add_archive(session: Session, topics: list[Topic], rows: list[dict], student
 
 
 def generate(
-    session: Session, seed: int = SEED, prerequisites: dict = PREREQUISITES, textbook_effects: bool = True
+    session: Session,
+    seed: int = SEED,
+    prerequisites: dict = PREREQUISITES,
+    textbook_effects: bool = True,
+    anomaly: bool = True,
+    bad_items: bool = True,
+    trends: bool = True,
 ) -> None:
     """Заполняет пустую БД. Один и тот же seed всегда даёт одни и те же данные.
 
     prerequisites задаёт зависимости тем; без них освоение каждой темы влияет только на неё саму.
     textbook_effects=False убирает вклад учебников: все учебники учат одинаково, остаётся только
-    неравномерный выбор учебников школами. Последовательность случайных чисел от флагов не зависит.
+    неравномерный выбор учебников школами. anomaly, bad_items и trends выключают провал темы в 6Д Школы №4,
+    два задания, не различающих учеников, и тренды по годам. Последовательность случайных чисел от флагов
+    не зависит, поэтому при всех флагах по умолчанию данные те же.
     """
     rng = np.random.default_rng(seed)
     pretest_rng = np.random.default_rng(seed + PRETEST_SEED_OFFSET)
@@ -269,7 +280,7 @@ def generate(
                         + sum(weight * mastery[base] for base, weight in prerequisites.get(topic_name, ()))
                         + noise
                     )
-                    if (school_no, class_name, topic_name) == ANOMALY:
+                    if anomaly and (school_no, class_name, topic_name) == ANOMALY:
                         raw += ANOMALY_EFFECT
                     rows.append(
                         {
@@ -282,8 +293,8 @@ def generate(
                     )
 
     session.execute(insert(TestResult), rows)
-    add_items(session, tests, rows, seed)
-    add_archive(session, topics, rows, student_school, seed)
+    add_items(session, tests, rows, seed, BAD_ITEMS if bad_items else set())
+    add_archive(session, topics, rows, student_school, seed, YEARLY_TREND if trends else {})
     mark_version(session)
     session.commit()
 

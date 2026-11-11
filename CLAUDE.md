@@ -76,6 +76,7 @@ TopicYearStat(topic, school, year, avg_score, n_students)
 - данные: `cd backend && python -m scripts.seed --reset`
 - сервер: `cd backend && uvicorn app.main:app --reload` (порт 8000)
 - тесты: `cd backend && pytest`
+- проверка методов на seed 1–8: `cd backend && python -m scripts.validate` (результат в README)
 - frontend: `cd frontend && npm install && npm run dev` (порт 3000)
 - линт: `cd frontend && npm run lint`
 
