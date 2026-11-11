@@ -1,0 +1,20 @@
+{
+  "name": "Data-Driven Curriculum",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+  "postCreateCommand": "pip install --disable-pip-version-check -r backend/requirements.txt && cd backend && python -m scripts.seed --reset && cd ../frontend && npm ci --no-audit --no-fund && npm run build",
+  "postAttachCommand": {
+    "api": "cd backend && python -m uvicorn app.main:app --port 8000",
+    "web": "cd frontend && npm start"
+  },
+  "forwardPorts": [3000, 8000],
+  "portsAttributes": {
+    "3000": { "label": "Интерфейс", "onAutoForward": "openBrowser" },
+    "8000": { "label": "API (/docs)", "onAutoForward": "silent" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] }
+  }
+}
