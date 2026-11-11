@@ -1,0 +1,86 @@
+name: Проверка
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Аналитика и API (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  frontend:
+    name: Интерфейс (lint и сборка)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+
+  docker:
+    name: Образ для живой ссылки
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Сборка образа
+        run: docker build -t ddc .
+      - name: Запуск контейнера
+        run: docker run -d --name ddc -p 3000:10000 ddc
+      - name: Сайт и API отвечают
+        run: |
+          for i in $(seq 120); do curl -fsS -o /dev/null http://localhost:3000/api/stats && break; sleep 1; done
+          curl -fsS http://localhost:3000/ | grep -q "Главное за минуту"
+          curl -fsS -o /dev/null "http://localhost:3000/?school=5"
+          curl -fsS -o /dev/null http://localhost:3000/topics/1
+          curl -fsS -o /dev/null http://localhost:3000/textbooks
+          curl -fsS -o /dev/null http://localhost:3000/recommendations
+          curl -fsS -o /dev/null http://localhost:3000/recommendations/export.csv
+          curl -fsS http://localhost:3000/api/stats
+          curl -fsS http://localhost:3000/api/docs | grep -qi swagger
+          curl -fsS http://localhost:3000/api/openapi.json | grep -q '"/api"'
+          curl -fsS "http://localhost:3000/api/textbooks/compare?topic_id=3" | grep -q p_value
+      - name: Логи контейнера
+        if: always()
+        run: docker logs ddc
+
+  start-sh:
+    name: Запуск ./start.sh на Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: ./start.sh
+        run: |
+          EDTECH_NO_BROWSER=1 ./start.sh > start.log 2>&1 &
+          for i in $(seq 600); do curl -fsS -o /dev/null http://localhost:3000/ && break; sleep 1; done
+          curl -fsS http://localhost:3000/ | grep -q "Главное за минуту"
+          curl -fsS http://localhost:8000/stats
+      - name: Вывод start.sh
+        if: always()
+        run: cat start.log
