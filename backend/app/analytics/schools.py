@@ -124,3 +124,13 @@ def outliers_for_school(response: dict, school_id: int, school: str) -> dict:
         else f"{in_school(school)} необычных результатов по отдельным темам не найдено."
     )
     return {**response, "outliers": outliers, "conclusion": conclusion, "scope_note": SCOPE_NOTE}
+
+
+def roots_in_school(roots: dict[int, list[str]], topics: list[dict]) -> dict[int, list[str]]:
+    """Корни, которые дают час в плане школы.
+
+    Связи тем ищутся по всем школам, но час сверх потребности корень получает, только если хотя бы одна
+    зависимая от него тема сложная именно в этой школе: иначе лечить нечего.
+    """
+    hard = {topic["topic"] for topic in topics if topic["level"] == "hard"}
+    return {root: dependents for root, dependents in roots.items() if any(name in hard for name in dependents)}

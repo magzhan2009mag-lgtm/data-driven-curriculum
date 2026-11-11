@@ -82,8 +82,12 @@ def hours_card(hours: dict) -> dict:
                 value_all=hours.get("hours_moved_all"))
 
 
-def finding_card(outliers: dict, prerequisites: dict, topics: list[dict]) -> dict:
-    """Необычный класс, если он есть в выбранном срезе; иначе корень проблемы."""
+def finding_card(outliers: dict, prerequisites: dict, topics: list[dict], school: str | None = None,
+                 active_roots: set[int] | None = None) -> dict:
+    """Необычный класс, если он есть в выбранном срезе; иначе корень проблемы.
+
+    active_roots — корни, которые дают час в плане школы; у остальных пишем, почему часа нет.
+    """
     if outliers["outliers"]:
         item = outliers["outliers"][0]
         text = (f"Тема «{item['topic']}»: {score(item['avg_score'])} балла при ожидаемых "
@@ -95,18 +99,20 @@ def finding_card(outliers: dict, prerequisites: dict, topics: list[dict]) -> dic
         topic = next(item for item in topics if item["topic_id"] == root["topic_id"])
         names = [dependent["topic"] for dependent in root["dependents"]]
         text = f"От неё {dependents_phrase(names)}: пробелы в ней переходят дальше по программе."
+        if school is not None and active_roots is not None and root["topic_id"] not in active_roots:
+            text += f" {in_school(school)} зависимые темы не сложные, поэтому лишний час ей не нужен."
         return card("root", "Корень проблемы", text, f"/topics/{root['topic_id']}", headline=root["topic"],
                     value=topic["avg_score"], unit="score", value_all=topic.get("avg_score_all"))
     return card("outlier", "Необычные результаты", outliers["conclusion"], "/")
 
 
 def build_summary(topics: list[dict], comparison: dict, overall: dict, hours: dict, outliers: dict,
-                  prerequisites: dict, school: str | None) -> dict:
+                  prerequisites: dict, school: str | None, active_roots: set[int] | None = None) -> dict:
     return {
         "cards": [
             hardest_topic_card(topics),
             weakest_textbook_card(comparison, overall, school),
             hours_card(hours),
-            finding_card(outliers, prerequisites, topics),
+            finding_card(outliers, prerequisites, topics, school, active_roots),
         ]
     }

@@ -9,6 +9,7 @@ from app.analytics.difficulty import topic_difficulty
 from app.analytics.hours_effect import hours_effect
 from app.analytics.prerequisites import root_dependents, topic_prerequisites
 from app.analytics.recommendations import recommend_by_textbook, recommend_optimal_hours
+from app.analytics.schools import roots_in_school
 from app.main import app, get_db
 
 SCHOOL_ID = 5
@@ -120,7 +121,7 @@ def test_trends_use_only_school(client, seeded_engine, school):
 
 def test_recommendations_use_only_school(client, results, school):
     body = client.get(with_school("/recommendations", SCHOOL_ID)).json()
-    roots = root_dependents(topic_prerequisites(results))
+    roots = roots_in_school(root_dependents(topic_prerequisites(results)), topic_difficulty(school))
     expected = recommend_by_textbook(school, roots, SCHOOL)
     assert [item["delta"] for item in body["items"]] == [item["delta"] for item in expected["items"]]
     assert sum(item["hours_recommended"] for item in body["items"]) == 84
@@ -183,7 +184,7 @@ def test_compare_uses_only_school(client, school):
 
 
 def test_optimal_and_hours_effect_use_only_school(client, results, school):
-    roots = root_dependents(topic_prerequisites(results))
+    roots = roots_in_school(root_dependents(topic_prerequisites(results)), topic_difficulty(school))
     optimal = client.get(with_school("/recommendations/optimal", SCHOOL_ID)).json()
     expected = recommend_optimal_hours(topic_difficulty(school), roots)
     assert [item["delta"] for item in optimal["items"]] == [item["delta"] for item in expected["items"]]
@@ -203,3 +204,31 @@ def test_explanation_skips_textbooks_without_plan(client):
     body = client.get(with_school("/recommendations", SCHOOL_ID)).json()
     facts = explain.build_facts(body["items"])
     assert all(row["textbook"] == "Учебник C" for fact in facts for row in fact["by_textbook"])
+
+
+def test_root_gets_hour_only_if_dependent_is_hard_in_school(client):
+    # В Школе №5 сложных тем нет: «Дроби» — корень по всем школам, но лишний час им здесь не нужен.
+    fifth = {item["topic"]: item for item in client.get(with_school("/recommendations", SCHOOL_ID)).json()["items"]}
+    assert fifth["Дроби"]["delta"] == 0
+    assert "зависят" not in fifth["Дроби"]["reason"]
+    root_card = next(card for card in client.get(with_school("/summary", SCHOOL_ID)).json()["cards"] if card["kind"] == "root")
+    assert "В Школе №5 зависимые темы не сложные" in root_card["text"]
+
+    # В Школе №1 «Проценты» и «Десятичные дроби» сложные: «Дроби» получают час как корень.
+    first = {item["topic"]: item for item in client.get(with_school("/recommendations", 1)).json()["items"]}
+    assert "поэтому ей нужен ещё час" in first["Дроби"]["reason"]
+    root_card = next(card for card in client.get(with_school("/summary", 1)).json()["cards"] if card["kind"] == "root")
+    assert "лишний час" not in root_card["text"]
+
+
+def test_roots_in_school_keeps_root_with_hard_dependent():
+    roots = {3: ["Проценты", "Десятичные дроби"], 7: ["Уравнения"]}
+    topics = [{"topic": "Проценты", "level": "hard"}, {"topic": "Десятичные дроби", "level": "medium"},
+              {"topic": "Уравнения", "level": "medium"}]
+    assert roots_in_school(roots, topics) == {3: ["Проценты", "Десятичные дроби"]}
+
+
+def test_all_schools_plan_keeps_all_roots(client):
+    body = client.get(with_school("/recommendations", SCHOOL_ID)).json()
+    overall = {item["topic"]: item for item in client.get("/recommendations").json()["items"]}
+    assert {item["topic"]: item["delta_all"] for item in body["items"]} == {name: item["delta"] for name, item in overall.items()}

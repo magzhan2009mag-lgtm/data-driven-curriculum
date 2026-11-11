@@ -28,6 +28,18 @@ function headline(plans: Plan[]): string {
   return `«${busiest.textbook}»: больше часов на ${list.format(busiest.added.map((item) => item.topic))}`;
 }
 
+const TOPIC_FORMS: Partial<Record<Intl.LDMLPluralRule, string>> = { one: "тему", few: "темы", many: "тем" };
+const topicsWord = (count: number) => TOPIC_FORMS[new Intl.PluralRules("ru-RU").select(count)] ?? "темы";
+
+/** С выбранной школой заголовок говорит о школе: сколько часов перенести и на какие темы. */
+function schoolHeadline(school: string, moved: number, items: Item[]): string {
+  if (moved === 0) return `${school}: менять часы не нужно`;
+  const added = items.filter((item) => item.delta > 0).map((item) => `«${item.topic}»`);
+  // В заголовке не больше трёх тем, остальные — в плане ниже.
+  const shown = added.length > 3 ? [...added.slice(0, 3), `ещё ${added.length - 3} ${topicsWord(added.length - 3)}`] : added;
+  return `${school}: перенести ${formatHours(moved)} — на ${list.format(shown)}`;
+}
+
 function Change({ item }: { item: Item }) {
   if (item.delta === 0) {
     return <span className="text-xl font-semibold tabular-nums whitespace-nowrap">{item.hours_current} ч</span>;
@@ -101,8 +113,9 @@ export default async function RecommendationsPage({ searchParams }: PageProps<"/
   return (
     <div className="space-y-12">
       <section>
-        {selected && <p className="mb-2 text-lg text-muted-foreground">{selected.school}</p>}
-        <h1 className="max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{headline(textbook_plans)}</h1>
+        <h1 className="max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
+          {selected ? schoolHeadline(selected.school, hours_moved, items) : headline(textbook_plans)}
+        </h1>
         <ul className="mt-4 max-w-prose space-y-1">
           {textbook_plans.map((plan) => (
             <li key={plan.textbook}>{plan.text}</li>

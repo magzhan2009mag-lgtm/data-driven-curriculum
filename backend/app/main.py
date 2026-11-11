@@ -25,6 +25,7 @@ from app.analytics.schools import (
     few_students,
     list_schools,
     only_school,
+    roots_in_school,
     outliers_for_school,
     school_note,
 )
@@ -62,16 +63,23 @@ def topic_scope(results: pd.DataFrame, topic_id: int | None) -> pd.DataFrame:
     return results if topic_id is None else results[results["topic_id"] == topic_id]
 
 
-def all_school_roots(scope: Scope) -> dict[int, list[str]]:
-    """Корни проблемы считаются по всем школам: внутри одной школы связи тем не найти."""
-    return root_dependents(topic_prerequisites(scope.all_results))
+def roots_for(scope: Scope, prerequisites: dict | None = None) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    """Корни для плана выбранного среза и для плана по всем школам.
+
+    Связи тем ищутся по всем школам: внутри одной школы их не найти. В плане школы час получает только корень,
+    у которого хотя бы одна зависимая тема сложная в этой школе.
+    """
+    all_roots = root_dependents(prerequisites or topic_prerequisites(scope.all_results))
+    if not scope.filtered:
+        return all_roots, all_roots
+    return roots_in_school(all_roots, topic_difficulty(scope.results)), all_roots
 
 
-def hours_for(scope: Scope, roots: dict[int, list[str]] | None = None) -> dict:
-    roots = all_school_roots(scope) if roots is None else roots
+def hours_for(scope: Scope, prerequisites: dict | None = None) -> dict:
+    roots, all_roots = roots_for(scope, prerequisites)
     response = recommend_by_textbook(scope.results, roots, scope.school)
     if scope.filtered:
-        add_all_schools_to_hours(response, recommend_hours(topic_difficulty(scope.all_results), roots))
+        add_all_schools_to_hours(response, recommend_hours(topic_difficulty(scope.all_results), all_roots))
     return response
 
 
@@ -108,10 +116,11 @@ def get_summary(scope: Scope = Depends(get_scope)) -> dict:
         topics_for(scope),
         comparison,
         overall,
-        hours_for(scope, root_dependents(prerequisites)),
+        hours_for(scope, prerequisites),
         outliers_for(scope),
         prerequisites,
         scope.school,
+        set(roots_for(scope, prerequisites)[0]),
     )
 
 
@@ -167,7 +176,7 @@ def get_recommendations_csv(scope: Scope = Depends(get_scope)) -> Response:
 
 @app.get("/recommendations/optimal")
 def get_recommendations_optimal(scope: Scope = Depends(get_scope)) -> dict:
-    return recommend_optimal_hours(topic_difficulty(scope.results), all_school_roots(scope))
+    return recommend_optimal_hours(topic_difficulty(scope.results), roots_for(scope)[0])
 
 
 @app.get("/recommendations/explanation")
