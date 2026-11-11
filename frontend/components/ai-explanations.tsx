@@ -1,16 +1,17 @@
 import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { getExplanations, type Recommendations } from "@/lib/api";
+import { schoolHref } from "@/lib/school";
 
 /**
  * Пояснения от Claude для тем, где часы меняются. Грузится отдельно, чтобы не задерживать страницу.
  * Если ИИ недоступен (нет ключа или связи), блока нет: на странице остаются шаблонные тексты.
  */
-export async function AiExplanations({ items }: { items: Recommendations["items"] }) {
-  const explanations = await getExplanations();
+export async function AiExplanations({ items, school }: { items: Recommendations["items"]; school?: number }) {
+  const explanations = await getExplanations(school);
   if (!explanations || explanations.source !== "llm") return null;
 
-  const changed = items.filter((item) => item.delta !== 0 || item.by_textbook.some((row) => row.delta !== 0));
+  const changed = items.filter((item) => item.delta !== 0 || item.by_textbook.some((row) => row.delta !== null && row.delta !== 0));
 
   const texts = new Map(explanations.items.map((item) => [item.topic_id, item.explanation]));
   return (
@@ -26,7 +27,7 @@ export async function AiExplanations({ items }: { items: Recommendations["items"
         {changed.map((item) => (
           <div key={item.topic_id}>
             <dt>
-              <Link href={`/topics/${item.topic_id}`} className="font-medium underline-offset-4 hover:underline">
+              <Link href={schoolHref(`/topics/${item.topic_id}`, school)} className="font-medium underline-offset-4 hover:underline">
                 {item.topic}
               </Link>
             </dt>

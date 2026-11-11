@@ -2,6 +2,11 @@ const API_URL = process.env.API_URL ?? "http://127.0.0.1:8000";
 
 export type Level = "hard" | "medium" | "easy";
 
+export type School = { school_id: number; school: string; n_classes: number; n_students: number };
+
+/** Поля, которые API добавляет при выбранной школе: те же показатели по всем школам для сравнения. */
+type ScopeNote = { scope_note?: string };
+
 export type TopicDifficulty = {
   topic_id: number;
   topic: string;
@@ -12,6 +17,10 @@ export type TopicDifficulty = {
   level: Level;
   by_school: { school_id: number; school: string; avg_score: number }[];
   score_distribution: { range: string; count: number; failing: boolean }[];
+  avg_score_all?: number;
+  fail_rate_all?: number;
+  difficulty_index_all?: number;
+  by_class?: { class_id: number; class: string; textbook: string; avg_score: number }[];
 };
 
 export type Comparison = {
@@ -24,6 +33,8 @@ export type Comparison = {
     avg_score: number;
     adjusted_score: number;
     mean_z: number;
+    enough_data: boolean;
+    adjusted_score_all?: number | null;
   }[];
   comparisons: {
     a: string;
@@ -37,16 +48,18 @@ export type Comparison = {
   conclusion: string;
   confounding_note: string | null;
   limitation: string;
+  school_note: string | null;
 };
 
+/** Строка плана учебника. В одной школе у учебника с малым числом учеников чисел нет (null). */
 export type TextbookHours = {
   textbook: string;
-  level: Level;
-  avg_score: number;
-  fail_rate: number;
-  difficulty_index: number;
-  hours_recommended: number;
-  delta: number;
+  level: Level | null;
+  avg_score: number | null;
+  fail_rate: number | null;
+  difficulty_index: number | null;
+  hours_recommended: number | null;
+  delta: number | null;
   reason: string;
 };
 
@@ -62,13 +75,17 @@ export type Recommendations = {
     delta: number;
     reason: string;
     by_textbook: TextbookHours[];
+    delta_all?: number;
+    hours_recommended_all?: number;
   }[];
   textbook_plans: {
     textbook: string;
     hours_moved: number;
     added: { topic_id: number; topic: string; delta: number }[];
     text: string;
+    enough_data: boolean;
   }[];
+  hours_moved_all?: number;
 };
 
 export type Explanations = {
@@ -100,11 +117,12 @@ export type ItemQuality = {
   conclusion: string;
 };
 
-export type Outliers = {
+export type Outliers = ScopeNote & {
   n_classes: number;
   outliers: {
     class_id: number;
     class: string;
+    school_id: number;
     school: string;
     textbook: string;
     topic_id: number;
@@ -130,7 +148,7 @@ export type PrerequisiteLink = {
   text: string;
 };
 
-export type Prerequisites = {
+export type Prerequisites = ScopeNote & {
   topics: { topic_id: number; topic: string; level: Level }[];
   links: PrerequisiteLink[];
   roots: {
@@ -158,44 +176,59 @@ async function request<T>(path: string): Promise<T | null> {
   return response.json();
 }
 
-export async function getTopics(): Promise<TopicDifficulty[]> {
-  return (await request<TopicDifficulty[]>("/topics/difficulty")) ?? [];
+/** Собирает адрес запроса: необязательные параметры без значения в адрес не попадают. */
+function apiPath(path: string, params: Record<string, number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(name, String(value));
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
 }
 
-export function getComparison(topicId?: number): Promise<Comparison | null> {
-  return request<Comparison>(topicId === undefined ? "/textbooks/compare" : `/textbooks/compare?topic_id=${topicId}`);
+export async function getSchools(): Promise<School[]> {
+  return (await request<School[]>("/schools")) ?? [];
 }
 
-export async function getRecommendations(): Promise<Recommendations> {
-  const body = await request<Recommendations>("/recommendations");
-  if (!body) throw new Error("API /recommendations: 404");
+export async function getTopics(school?: number): Promise<TopicDifficulty[]> {
+  return (await request<TopicDifficulty[]>(apiPath("/topics/difficulty", { school_id: school }))) ?? [];
+}
+
+export function getComparison(topicId?: number, school?: number): Promise<Comparison | null> {
+  return request<Comparison>(apiPath("/textbooks/compare", { topic_id: topicId, school_id: school }));
+}
+
+export async function getRecommendations(school?: number): Promise<Recommendations> {
+  const path = apiPath("/recommendations", { school_id: school });
+  const body = await request<Recommendations>(path);
+  if (!body) throw new Error(`API ${path}: 404`);
   return body;
 }
 
-export async function getTrends(): Promise<Trend[]> {
-  return (await request<Trend[]>("/topics/trends")) ?? [];
+export async function getTrends(school?: number): Promise<Trend[]> {
+  return (await request<Trend[]>(apiPath("/topics/trends", { school_id: school }))) ?? [];
 }
 
-export function getItemQuality(topicId: number): Promise<ItemQuality | null> {
-  return request<ItemQuality>(`/items/quality?topic_id=${topicId}`);
+export function getItemQuality(topicId: number, school?: number): Promise<ItemQuality | null> {
+  return request<ItemQuality>(apiPath("/items/quality", { topic_id: topicId, school_id: school }));
 }
 
-export function getOutliers(): Promise<Outliers | null> {
-  return request<Outliers>("/classes/outliers");
+export function getOutliers(school?: number): Promise<Outliers | null> {
+  return request<Outliers>(apiPath("/classes/outliers", { school_id: school }));
 }
 
-export function getPrerequisites(): Promise<Prerequisites | null> {
-  return request<Prerequisites>("/topics/prerequisites");
+export function getPrerequisites(school?: number): Promise<Prerequisites | null> {
+  return request<Prerequisites>(apiPath("/topics/prerequisites", { school_id: school }));
 }
 
-export function getRegression(topicId?: number): Promise<Regression | null> {
-  return request<Regression>(topicId === undefined ? "/textbooks/regression" : `/textbooks/regression?topic_id=${topicId}`);
+export function getRegression(topicId?: number, school?: number): Promise<Regression | null> {
+  return request<Regression>(apiPath("/textbooks/regression", { topic_id: topicId, school_id: school }));
 }
 
 /** Пояснения от Claude. Без ключа или при ошибке бэкенд отдаёт шаблоны; недоступный API не ломает страницу. */
-export async function getExplanations(): Promise<Explanations | null> {
+export async function getExplanations(school?: number): Promise<Explanations | null> {
   try {
-    return await request<Explanations>("/recommendations/explanation");
+    return await request<Explanations>(apiPath("/recommendations/explanation", { school_id: school }));
   } catch {
     return null;
   }

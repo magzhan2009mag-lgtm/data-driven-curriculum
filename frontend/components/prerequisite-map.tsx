@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { Level, PrerequisiteLink, Prerequisites } from "@/lib/api";
 import { LEVEL_LABELS } from "@/lib/format";
+import { schoolHref } from "@/lib/school";
 import { cn } from "@/lib/utils";
 
 const ROW = 36;
@@ -38,7 +39,7 @@ function linkKey(link: PrerequisiteLink): string {
 }
 
 /** Дуговая диаграмма: темы в порядке программы, дуга ведёт от темы-основы к зависимой теме. */
-export function PrerequisiteMap({ data }: { data: Prerequisites }) {
+export function PrerequisiteMap({ data, school }: { data: Prerequisites; school?: number }) {
   const [active, setActive] = useState<string | null>(null);
   const position = new Map(data.topics.map((topic, index) => [topic.topic_id, index]));
   const roots = new Set(data.roots.map((root) => root.topic_id));
@@ -139,7 +140,7 @@ export function PrerequisiteMap({ data }: { data: Prerequisites }) {
               <li key={topic.topic_id} style={{ height: ROW }} className="flex items-center gap-3 pl-2">
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{index + 1}</span>
                 <Link
-                  href={`/topics/${topic.topic_id}`}
+                  href={schoolHref(`/topics/${topic.topic_id}`, school)}
                   className={cn(
                     "min-w-0 truncate text-sm underline-offset-4 transition-colors duration-150 hover:underline sm:text-base",
                     roots.has(topic.topic_id) && "font-semibold",
@@ -172,13 +173,13 @@ export function PrerequisiteMap({ data }: { data: Prerequisites }) {
               )}
             >
               <p className="font-medium">
-                <Link href={`/topics/${link.from_topic_id}`} className="underline-offset-4 hover:underline">
+                <Link href={schoolHref(`/topics/${link.from_topic_id}`, school)} className="underline-offset-4 hover:underline">
                   {link.from_topic}
                 </Link>
                 <span aria-label="влияет на" className="px-2 text-muted-foreground">
                   →
                 </span>
-                <Link href={`/topics/${link.to_topic_id}`} className="underline-offset-4 hover:underline">
+                <Link href={schoolHref(`/topics/${link.to_topic_id}`, school)} className="underline-offset-4 hover:underline">
                   {link.to_topic}
                 </Link>
               </p>

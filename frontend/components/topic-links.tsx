@@ -1,8 +1,10 @@
 import Link from "next/link";
 import type { PrerequisiteLink, Prerequisites } from "@/lib/api";
+import { schoolHref } from "@/lib/school";
 
-function LinkList({ title, id, intro, items, other }: {
+function LinkList({ title, id, intro, items, other, school }: {
   title: string;
+  school?: number;
   id: string;
   intro?: string;
   items: PrerequisiteLink[];
@@ -19,7 +21,7 @@ function LinkList({ title, id, intro, items, other }: {
           const topic = other(link);
           return (
             <li key={`${link.from_topic_id}-${link.to_topic_id}`} className="py-3">
-              <Link href={`/topics/${topic.id}`} className="font-medium underline-offset-4 hover:underline">
+              <Link href={schoolHref(`/topics/${topic.id}`, school)} className="font-medium underline-offset-4 hover:underline">
                 {topic.name}
               </Link>
               <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{link.text}</p>
@@ -32,7 +34,7 @@ function LinkList({ title, id, intro, items, other }: {
 }
 
 /** «Опирается на» и «От неё зависят»: связи темы с другими темами программы. */
-export function TopicLinks({ data, topicId }: { data: Prerequisites | null; topicId: number }) {
+export function TopicLinks({ data, topicId, school }: { data: Prerequisites | null; topicId: number; school?: number }) {
   if (!data) return null;
   const basis = data.links.filter((link) => link.to_topic_id === topicId);
   const dependents = data.links.filter((link) => link.from_topic_id === topicId);
@@ -46,6 +48,7 @@ export function TopicLinks({ data, topicId }: { data: Prerequisites | null; topi
           title="Опирается на"
           id="basis-title"
           items={basis}
+          school={school}
           other={(link) => ({ id: link.from_topic_id, name: link.from_topic })}
         />
       )}
@@ -55,6 +58,7 @@ export function TopicLinks({ data, topicId }: { data: Prerequisites | null; topi
           id="dependents-title"
           intro={root?.text}
           items={dependents}
+          school={school}
           other={(link) => ({ id: link.to_topic_id, name: link.to_topic })}
         />
       )}

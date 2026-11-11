@@ -46,7 +46,9 @@ def test_compare_format(client, topics):
     body = client.get("/textbooks/compare", params={"topic_id": topic_id}).json()
     assert body["topic_id"] == topic_id
     assert body["topic"] == "Дроби"
-    assert set(body["textbooks"][0]) == {"textbook_id", "name", "n_students", "avg_score", "adjusted_score", "mean_z"}
+    assert set(body["textbooks"][0]) == {
+        "textbook_id", "name", "n_students", "avg_score", "adjusted_score", "mean_z", "enough_data"
+    }
     assert len(body["comparisons"]) == 3
     assert set(body["comparisons"][0]) == {
         "a", "b", "p_value", "p_adjusted", "cohens_d", "effect", "significant",

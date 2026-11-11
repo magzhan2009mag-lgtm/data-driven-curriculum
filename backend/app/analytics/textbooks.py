@@ -187,6 +187,7 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
             "avg_score": round(float(group["score"].mean()), 1),
             "adjusted_score": round(float(adjusted[name]), 1),
             "mean_z": round(float(z_by_book[name].mean()), 3),
+            "enough_data": len(z_by_book[name]) >= MIN_STUDENTS,
         }
         for (textbook_id, name), group in scope.groupby(["textbook_id", "textbook"])
     ]

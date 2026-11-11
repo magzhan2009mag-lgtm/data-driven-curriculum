@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { parseSchool, schoolHref } from "@/lib/school";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -12,6 +13,7 @@ const LINKS = [
 
 export function SiteNav() {
   const pathname = usePathname();
+  const school = parseSchool(useSearchParams().get("school") ?? undefined);
   return (
     <nav aria-label="Разделы" className="-mx-2 flex flex-wrap text-sm">
       {LINKS.map(({ href, label }) => {
@@ -19,7 +21,7 @@ export function SiteNav() {
         return (
           <Link
             key={href}
-            href={href}
+            href={schoolHref(href, school)}
             aria-current={active ? "page" : undefined}
             className={cn(
               "rounded-sm px-2 py-1.5 underline-offset-4 transition-colors duration-150 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",

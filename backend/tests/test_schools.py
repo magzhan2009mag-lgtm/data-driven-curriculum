@@ -132,6 +132,9 @@ def test_few_students_rule_in_one_school(client):
     assert compare["school_note"].startswith("В Школе №5 у учебников A и B меньше 30 учеников")
     assert "Смотрите сравнение по всем школам" in compare["school_note"]
     assert all(book["adjusted_score_all"] is not None for book in compare["textbooks"])
+    assert {book["name"]: book["enough_data"] for book in compare["textbooks"]} == {
+        "Учебник A": False, "Учебник B": False, "Учебник C": True
+    }
 
     plans = {plan["textbook"]: plan for plan in client.get(with_school("/recommendations", SCHOOL_ID)).json()["textbook_plans"]}
     assert not plans["Учебник A"]["enough_data"] and not plans["Учебник B"]["enough_data"]
@@ -146,6 +149,7 @@ def test_few_students_rule_in_one_school(client):
 def test_without_school_nothing_changes(client):
     compare = client.get("/textbooks/compare").json()
     assert compare["school_note"] is None
+    assert all(book["enough_data"] for book in compare["textbooks"])
     assert all(plan["enough_data"] for plan in client.get("/recommendations").json()["textbook_plans"])
 
 

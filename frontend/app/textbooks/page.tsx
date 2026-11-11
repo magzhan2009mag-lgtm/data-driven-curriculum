@@ -1,10 +1,13 @@
 import { Check, Minus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getComparison, getRegression, getTopics } from "@/lib/api";
 import { formatIndex, formatP, formatScore, formatSigned } from "@/lib/format";
+import { inSchool, schoolHref } from "@/lib/school";
+import { readScope } from "@/lib/scope";
 import { cn } from "@/lib/utils";
 
 function TopicLink({ href, active, label }: { href: string; active: boolean; label: string }) {
@@ -26,11 +29,13 @@ function TopicLink({ href, active, label }: { href: string; active: boolean; lab
 export default async function TextbooksPage({ searchParams }: PageProps<"/textbooks">) {
   const { topic_id: rawId } = await searchParams;
   const topicId = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : undefined;
+  const { school, selected } = await readScope(searchParams);
   const [topics, comparison, regression] = await Promise.all([
-    getTopics(),
-    getComparison(topicId),
-    getRegression(topicId),
+    getTopics(school),
+    getComparison(topicId, school),
+    getRegression(topicId, school),
   ]);
+  const topicPath = topicId === undefined ? "/textbooks" : `/textbooks?topic_id=${topicId}`;
   if (!comparison) notFound();
   if (topics.length === 0) return <EmptyState />;
 
@@ -40,7 +45,20 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
         <h1 className="text-3xl leading-tight font-semibold sm:text-4xl">
           Сравнение учебников: {comparison.topic ? `«${comparison.topic}»` : "все темы"}
         </h1>
-        <p className="mt-3 max-w-prose text-lg">{comparison.conclusion}</p>
+        {selected && <p className="mt-1 text-lg text-muted-foreground">{selected.school}</p>}
+        {comparison.school_note ? (
+          <div className="mt-4 max-w-prose border-l-2 border-primary pl-4">
+            <p className="text-lg">{comparison.school_note}</p>
+            <Link
+              href={schoolHref(topicPath, undefined)}
+              className="mt-2 inline-block text-primary underline underline-offset-4"
+            >
+              Открыть сравнение по всем школам
+            </Link>
+          </div>
+        ) : (
+          <p className="mt-3 max-w-prose text-lg">{comparison.conclusion}</p>
+        )}
       </section>
 
       {comparison.confounding_note && (
@@ -59,11 +77,11 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
       )}
 
       <nav aria-label="Выбор темы" className="flex flex-wrap gap-1.5">
-        <TopicLink href="/textbooks" active={topicId === undefined} label="Все темы" />
+        <TopicLink href={schoolHref("/textbooks", school)} active={topicId === undefined} label="Все темы" />
         {topics.map((topic) => (
           <TopicLink
             key={topic.topic_id}
-            href={`/textbooks?topic_id=${topic.topic_id}`}
+            href={schoolHref(`/textbooks?topic_id=${topic.topic_id}`, school)}
             active={topic.topic_id === topicId}
             label={topic.topic}
           />
@@ -77,16 +95,29 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
             <div className="mt-2 flex items-baseline gap-x-6 tabular-nums">
               <div>
                 <p className="text-4xl font-semibold">{formatScore(book.adjusted_score)}</p>
-                <p className="mt-1 text-sm text-muted-foreground">в одинаковых школах</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {selected ? `в ${inSchool(selected.school)}` : "в одинаковых школах"}
+                </p>
               </div>
-              <div>
-                <p className="text-xl text-muted-foreground">{formatScore(book.avg_score)}</p>
-                <p className="mt-1 text-sm text-muted-foreground">простое среднее</p>
-              </div>
+              {/* В одной школе балл «в этой школе» и простое среднее совпадают: второе не показываем. */}
+              {!selected && (
+                <div>
+                  <p className="text-xl text-muted-foreground">{formatScore(book.avg_score)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">простое среднее</p>
+                </div>
+              )}
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {book.n_students} уч., отклонение от среднего по школе и теме {formatSigned(book.mean_z)} σ
-            </p>
+            <AllSchools value={book.adjusted_score_all} format={formatScore} standalone className="mt-2 text-sm tabular-nums" />
+            {book.enough_data ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {book.n_students} уч., отклонение от среднего по школе и теме {formatSigned(book.mean_z)} σ
+              </p>
+            ) : (
+              <p className="mt-2 flex items-start gap-1.5 text-sm">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-destructive" aria-hidden />
+                Всего {book.n_students} уч. — мало данных, вывод не делаем
+              </p>
+            )}
           </div>
         ))}
       </section>

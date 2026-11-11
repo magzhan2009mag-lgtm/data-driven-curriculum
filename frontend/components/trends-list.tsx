@@ -2,9 +2,10 @@ import Link from "next/link";
 import { TrendSparkline } from "@/components/trend-sparkline";
 import type { Trend } from "@/lib/api";
 import { formatScore } from "@/lib/format";
+import { schoolHref } from "@/lib/school";
 
 /** Темы, у которых результаты по годам заметно меняются; стабильные не показываем. */
-export function TrendsList({ trends }: { trends: Trend[] }) {
+export function TrendsList({ trends, school }: { trends: Trend[]; school?: number }) {
   const changing = trends.filter((trend) => trend.direction !== "без заметных изменений");
   if (changing.length === 0) return null;
   const years = changing[0].by_year;
@@ -25,7 +26,7 @@ export function TrendsList({ trends }: { trends: Trend[] }) {
             <li key={trend.topic_id} className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
               <TrendSparkline trend={trend} />
               <div className="min-w-0 flex-1">
-                <Link href={`/topics/${trend.topic_id}`} className="font-medium underline-offset-4 hover:underline">
+                <Link href={schoolHref(`/topics/${trend.topic_id}`, school)} className="font-medium underline-offset-4 hover:underline">
                   {trend.topic}
                 </Link>
                 <p className="text-sm text-muted-foreground">{trend.text}</p>
