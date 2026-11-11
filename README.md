@@ -1,6 +1,36 @@
 # Data-Driven Curriculum
 
+[![Проверка](https://github.com/magzhan2009mag-lgtm/data-driven-curriculum/actions/workflows/ci.yml/badge.svg)](https://github.com/magzhan2009mag-lgtm/data-driven-curriculum/actions/workflows/ci.yml)
+
 Интеллектуальная система оценки эффективности учебников и учебных программ для методистов.
+
+## Для жюри
+
+**Посмотреть без установки**
+
+- **GitHub Codespaces** — проект запускается в браузере прямо из этого репозитория: нажмите кнопку, подождите
+  3–5 минут, интерфейс откроется сам в новой вкладке (нужен только вход в GitHub).
+
+  [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/magzhan2009mag-lgtm/data-driven-curriculum?quickstart=1)
+
+**Запустить у себя:** Windows — двойной клик по `start.bat`, macOS и Linux — `./start.sh`
+(подробнее в разделе [«Как запустить»](#как-запустить)).
+
+### Что посмотреть за 3 минуты
+
+1. **Главная, «Главное за минуту».** Четыре вывода: самая сложная тема, самый слабый учебник с советом, сколько
+   часов перенести, необычный класс. Под любым выводом раскройте «Как посчитано»: метод, объём данных, p-value
+   и размер эффекта.
+2. **«Корень проблемы»** ниже на главной: «Проценты» сложные, но причина — «Дроби».
+3. **«Учебники».** По простому среднему лучший учебник C, но в одних и тех же школах разница с A всего 0,2 балла —
+   система показывает эту ловушку. По-настоящему слабее B, и для него есть совет.
+4. **«Часы».** План переноса часов с причиной у каждой темы и кнопка «Скачать для Excel».
+5. **«Школа» в шапке.** Всё пересчитывается для одной школы, рядом — цифры по всем школам.
+6. **API.** Swagger на `/docs` у сервера аналитики: попробуйте `GET /textbooks/compare?topic_id=3`.
+
+**Где код:** все расчёты — [`backend/app/analytics/`](backend/app/analytics), 230 тестов — [`backend/tests/`](backend/tests),
+проверка методов на 16 наборах данных — раздел [«Проверка методов»](#проверка-методов). Каждый коммит проверяет
+GitHub Actions: тесты, линт, сборка интерфейса, сборка Docker-образа и запуск `./start.sh` на Linux.
 
 ## Проблема и решение
 
@@ -168,6 +198,13 @@
 
 ## Как запустить
 
+### Без установки: GitHub Codespaces
+
+Кнопка «Open in GitHub Codespaces» в начале страницы. Codespaces сам ставит зависимости, создаёт демо-данные,
+запускает оба сервера и открывает интерфейс (порт 3000). API со Swagger — на вкладке «Ports», порт 8000, адрес `/docs`.
+
+### На своём компьютере
+
 Нужно установить:
 
 - **Python 3.11 или новее** (python.org; на Windows отметьте «Add python.exe to PATH»);
@@ -176,13 +213,32 @@
 Нужен интернет при первом запуске (устанавливаются зависимости Python и интерфейса) и для страницы
 http://localhost:8000/docs: Swagger UI загружает оформление из CDN.
 
-### Windows
+#### Windows
 
 Дважды щёлкните `start.bat` в корне репозитория. Он создаст окружение Python, установит зависимости, создаст
 демо-данные, запустит сервер аналитики (порт 8000) и интерфейс (порт 3000) и откроет http://localhost:3000.
 Чтобы остановить, закройте окна «EdTech Backend» и «EdTech Frontend».
 
-### macOS и Linux
+#### macOS и Linux
+
+```bash
+git clone https://github.com/magzhan2009mag-lgtm/data-driven-curriculum.git
+cd data-driven-curriculum
+./start.sh
+```
+
+Скрипт делает то же, что `start.bat`, и открывает http://localhost:3000. Остановить — Ctrl+C.
+
+#### Docker
+
+```bash
+docker build -t ddc .
+docker run -p 3000:10000 ddc            # http://localhost:3000, API: http://localhost:3000/api/docs
+```
+
+Один контейнер с аналитикой и интерфейсом; этот же образ разворачивается на Render по `render.yaml`.
+
+#### Вручную
 
 ```bash
 # сервер аналитики
@@ -209,7 +265,7 @@ npm run dev                             # http://localhost:3000
 - **Аналитика и API:** Python, FastAPI, SQLAlchemy 2, pandas, NumPy, SciPy, statsmodels, scikit-learn,
   Anthropic SDK (пояснения Claude с откатом на шаблоны).
 - **Данные:** SQLite (`backend/data.db`), без Docker.
-- **Тесты:** pytest — больше 200 тестов на метрики, API, фильтр по школе и генератор.
+- **Тесты:** pytest — 230 тестов на метрики, API, фильтр по школе и генератор; GitHub Actions на каждый коммит.
 
 ## Структура
 
@@ -227,6 +283,11 @@ frontend/
   lib/                   клиент API, форматирование, фильтр по школе
 docs/screenshots/        скриншоты для этого README
 start.bat                запуск в один клик на Windows
+start.sh                 запуск одной командой на macOS и Linux
+Dockerfile, docker/      один контейнер: аналитика + интерфейс
+render.yaml              живая демо-ссылка на Render
+.devcontainer/           GitHub Codespaces
+.github/workflows/       проверка каждого коммита
 ```
 
 ## Что дальше
