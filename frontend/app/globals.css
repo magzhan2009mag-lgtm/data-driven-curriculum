@@ -69,6 +69,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Фокус с клавиатуры должен быть заметен и на проекторе: у ссылок без своего кольца — сплошная обводка. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   body {
     @apply bg-background text-foreground;
   }

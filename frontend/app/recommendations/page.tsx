@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Download } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AiExplanations, AiExplanationsSkeleton } from "@/components/ai-explanations";
@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { HoursMatrix } from "@/components/hours-matrix";
 import { LevelMark } from "@/components/level-mark";
 import { Term } from "@/components/term";
+import { buttonVariants } from "@/components/ui/button";
 import { getRecommendations, type Recommendations } from "@/lib/api";
 import { formatHours } from "@/lib/format";
 import { inSchool, schoolHref } from "@/lib/school";
@@ -125,7 +126,23 @@ export default async function RecommendationsPage({ searchParams }: PageProps<"/
         </p>
       </section>
 
-      <HoursMatrix items={items} plans={textbook_plans} selected={selected} />
+      <div className="space-y-4">
+        <HoursMatrix items={items} plans={textbook_plans} selected={selected} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <a
+            href={schoolHref("/recommendations/export.csv", school)}
+            download
+            className={buttonVariants({ variant: "outline", size: "lg", className: "gap-2 rounded-md px-3" })}
+          >
+            <Download className="size-4" aria-hidden />
+            Скачать для Excel
+          </a>
+          <p className="text-sm text-muted-foreground">
+            Таблица этого плана{selected ? ` для ${selected.school.replace("Школа", "Школы")}` : ""}: часы по плану,
+            рекомендации всем классам и по учебникам, причина.
+          </p>
+        </div>
+      </div>
 
       <Suspense fallback={<AiExplanationsSkeleton />}>
         <AiExplanations items={items} school={school} />

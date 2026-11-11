@@ -25,6 +25,7 @@ EdTech-платформа для методистов, которая:
 4. Дашборд на Next.js (скилл frontend-design)
 
 НЕ делаем в MVP: авторизацию, загрузку файлов, PDF-экспорт, казахский язык.
+Экспорт плана часов в CSV для Excel есть (GET /recommendations/export.csv).
 
 ## Стек
 - Frontend: Next.js (app router), TypeScript, Tailwind, shadcn/ui, Recharts
@@ -47,9 +48,15 @@ Item(test, number), ItemResponse(item, student, correct),
 TopicYearStat(topic, school, year, avg_score, n_students)
 
 ## API
-- GET /topics/difficulty — сложность тем
+Все эндпоинты, кроме /schools, принимают необязательный `school_id`; неизвестная школа — 404
+«Школа не найдена». Что пересчитывается по школе, а что считается по всем школам, — в скилле metrics.
+
+- GET /schools — школы для выпадающего списка: id, название, число классов и учеников
+- GET /summary — «Главное за минуту»: 4 карточки-вывода для главной
+- GET /topics/difficulty — сложность тем (со школой ещё by_class и значения по всем школам)
 - GET /textbooks/compare?topic_id= — сравнение учебников
 - GET /recommendations — рекомендации по часам: общие и по учебникам
+- GET /recommendations/export.csv — план часов для Excel: «;», UTF-8 с BOM
 - GET /recommendations/optimal — те же рекомендации через linprog
 - GET /recommendations/explanation — пояснения Claude (нужен ANTHROPIC_API_KEY, без него шаблоны)
 - GET /textbooks/regression?topic_id= — вклад учебника с контролем школы и темы
@@ -76,6 +83,8 @@ TopicYearStat(topic, school, year, avg_score, n_students)
 - Работать по одному этапу, коммит после каждого
 - Перед коммитом: тесты и линт проходят
 - Интерфейс и тексты рекомендаций — на русском
+- Фильтр по школе живёт в адресе (`?school=5`); все внутренние ссылки строит `schoolHref`
+  из `frontend/lib/school.ts`, чтобы выбор школы сохранялся при переходах
 
 ## Скиллы проекта
 - metrics — формулы и пороги аналитики

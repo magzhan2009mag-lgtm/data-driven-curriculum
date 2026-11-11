@@ -29,6 +29,7 @@ ENDPOINTS = [
     "/classes/outliers",
     "/items/quality?topic_id=3",
     "/summary",
+    "/recommendations/export.csv",
 ]
 
 

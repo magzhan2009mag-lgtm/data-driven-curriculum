@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 import pandas as pd
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.analytics.clusters import cluster_schools, cluster_topics
@@ -28,6 +28,7 @@ from app.analytics.schools import (
     outliers_for_school,
     school_note,
 )
+from app.analytics.export import content_disposition, csv_filename, hours_csv
 from app.analytics.summary import build_summary
 from app.analytics.textbooks import MIN_STUDENTS, compare_textbooks
 from app.analytics.trends import topic_trends
@@ -152,6 +153,16 @@ def get_textbooks_matching(
 @app.get("/recommendations")
 def get_recommendations(scope: Scope = Depends(get_scope)) -> dict:
     return hours_for(scope)
+
+
+@app.get("/recommendations/export.csv")
+def get_recommendations_csv(scope: Scope = Depends(get_scope)) -> Response:
+    """План часов для Excel. Учитывает фильтр по школе."""
+    return Response(
+        content=hours_csv(hours_for(scope)).encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": content_disposition(csv_filename(scope.school_id))},
+    )
 
 
 @app.get("/recommendations/optimal")
