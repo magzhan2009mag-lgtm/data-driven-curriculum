@@ -48,13 +48,15 @@ Item(test, number), ItemResponse(item, student, correct),
 TopicYearStat(topic, school, year, avg_score, n_students)
 
 ## API
-Все эндпоинты, кроме /schools, принимают необязательный `school_id`; неизвестная школа — 404
+У каждого вывода есть объект `how` («Как посчитано»). Все эндпоинты, кроме /schools, принимают необязательный `school_id`; неизвестная школа — 404
 «Школа не найдена». Что пересчитывается по школе, а что считается по всем школам, — в скилле metrics.
 
 - GET /schools — школы для выпадающего списка: id, название, число классов и учеников
 - GET /summary — «Главное за минуту»: 4 карточки-вывода для главной
+- GET /stats — объём проанализированных данных для строки «Проанализировано: …»
 - GET /topics/difficulty — сложность тем (со школой ещё by_class и значения по всем школам)
 - GET /textbooks/compare?topic_id= — сравнение учебников
+- GET /textbooks/decisions — «Что решить по учебникам»: вывод и совет для каждого учебника
 - GET /recommendations — рекомендации по часам: общие и по учебникам
 - GET /recommendations/export.csv — план часов для Excel: «;», UTF-8 с BOM
 - GET /recommendations/optimal — те же рекомендации через linprog

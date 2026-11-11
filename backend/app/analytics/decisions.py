@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from app.analytics import how as explain
 from app.analytics.prerequisites import plural
 from app.analytics.textbooks import compare_textbooks
 
@@ -129,6 +130,18 @@ def equivalence_text(items: list[dict]) -> str:
     return " ".join(parts)
 
 
+def decision_how(name: str, results: pd.DataFrame, weaker: list[dict], stronger: list[dict]) -> dict:
+    """Сначала темы, где учебник отстаёт (на них держится совет), потом где он сильнее; внутри — от большей разницы."""
+    own = results[results["textbook"] == name]
+    ordered = sorted(weaker, key=lambda item: -item["points"]) + sorted(stronger, key=lambda item: -item["points"])
+    tests = [
+        explain.check(f"«{gap['topic']}»: {letter(gap['weaker'])} ниже {letter(gap['stronger'])} на {points(gap['points'])}",
+                      gap["p_adjusted"], "d Коэна", gap["cohens_d"], gap["effect"])
+        for gap in ordered
+    ]
+    return explain.how(explain.DECISION, int(own["student_id"].nunique()), len(own), tests)
+
+
 def textbook_decision(name: str, textbooks: list[str], gaps: list[dict], n_topics: int) -> dict:
     weaker = [gap for gap in gaps if gap["weaker"] == name]
     stronger = [gap for gap in gaps if gap["stronger"] == name]
@@ -184,5 +197,8 @@ def textbook_decisions(results: pd.DataFrame, all_schools: bool = False, note: s
         "all_schools": all_schools,
         "note": note,
         "n_topics": n_topics,
-        "textbooks": [textbook_decision(name, textbooks, gaps, n_topics) for name in textbooks],
+        "textbooks": [
+            {**decision, "how": decision_how(decision["textbook"], results, decision["weaker"], decision["stronger"])}
+            for decision in (textbook_decision(name, textbooks, gaps, n_topics) for name in textbooks)
+        ],
     }

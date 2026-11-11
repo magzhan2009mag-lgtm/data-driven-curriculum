@@ -116,3 +116,15 @@ def load_year_stats(session: Session) -> pd.DataFrame:
     """Возвращает архивные средние по школе, теме и году."""
     query = select(TopicYearStat.topic_id, TopicYearStat.school_id, TopicYearStat.year, TopicYearStat.avg_score)
     return pd.DataFrame(session.execute(query).mappings().all(), columns=["topic_id", "school_id", "year", "avg_score"])
+
+
+def count_item_responses(session: Session, school_id: int | None = None) -> int:
+    """Число ответов на отдельные задания тестов, при school_id — только учеников школы."""
+    query = select(func.count(ItemResponse.id))
+    if school_id is not None:
+        query = (
+            query.join(Student, ItemResponse.student_id == Student.id)
+            .join(SchoolClass, Student.class_id == SchoolClass.id)
+            .where(SchoolClass.school_id == school_id)
+        )
+    return int(session.execute(query).scalar_one())

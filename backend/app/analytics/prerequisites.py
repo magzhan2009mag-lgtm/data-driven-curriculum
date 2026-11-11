@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from app.analytics import how as explain
 from app.analytics.difficulty import topic_difficulty
 from app.analytics.textbooks import ALPHA, holm_adjust
 
@@ -197,6 +198,20 @@ def topic_prerequisites(results: pd.DataFrame) -> dict:
         )
     links.sort(key=lambda link: (link["from_topic_id"], link["to_topic_id"]))
     roots = find_roots(links, levels)
+    n_results = int(results["student_id"].isin(scores.index).sum())
+    for root in roots:
+        root["how"] = explain.how(
+            explain.ROOT,
+            len(scores),
+            n_results,
+            [
+                explain.check(f"«{link['from_topic']}» → «{link['to_topic']}»", link["p_adjusted"],
+                              "стандартизованный коэффициент", link["std_coef"],
+                              f"{format_points(link['points'])} на каждые 10")
+                for link in links
+                if link["from_topic_id"] == root["topic_id"]
+            ],
+        )
     return {**response, "links": links, "roots": roots, "conclusion": build_conclusion(links, roots)}
 
 

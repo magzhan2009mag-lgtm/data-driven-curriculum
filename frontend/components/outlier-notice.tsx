@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HowCalculated } from "@/components/how-calculated";
 import type { Outliers } from "@/lib/api";
 import { formatScore } from "@/lib/format";
 import { schoolHref } from "@/lib/school";
@@ -44,7 +45,10 @@ export function OutlierNotice({ data, school }: { data: Outliers | null; school?
                 <span className="text-xl font-semibold">{formatScore(item.avg_score)}</span>
                 <span className="text-sm text-muted-foreground"> при ожидаемых {formatScore(item.expected_score)}</span>
               </p>
-              <p className="max-w-prose text-sm text-muted-foreground">{item.text}</p>
+              <div className="max-w-prose text-sm text-muted-foreground">
+                <p>{item.text}</p>
+                <HowCalculated how={item.how} className="mt-1" />
+              </div>
             </li>
           ))}
         </ul>

@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from app.analytics import how as explain
+
 ROBUST_Z_THRESHOLD = 3.5
 # Приводит медианное абсолютное отклонение к масштабу стандартного отклонения.
 MAD_SCALE = 0.6745
@@ -62,7 +64,7 @@ def describe(item: dict) -> str:
 def class_outliers(results: pd.DataFrame) -> dict:
     """Ищет пары «класс × тема», результат которых не объясняется уровнем класса и учебником."""
     cells = results.groupby(["class_id", "class", "school_id", "school", "textbook", "topic_id", "topic"], as_index=False).agg(
-        avg_score=("score", "mean"), n=("score", "size")
+        avg_score=("score", "mean"), n=("score", "size"), n_students=("student_id", "nunique")
     )
     n_classes = int(cells["class_id"].nunique())
     if cells["topic_id"].nunique() < MIN_TOPICS or n_classes < 2:
@@ -101,6 +103,14 @@ def class_outliers(results: pd.DataFrame) -> dict:
             "direction": "выше ожидаемого" if row["difference"] > 0 else "ниже ожидаемого",
         }
         item["text"] = describe(item)
+        difference = f"{item['difference']:+.1f}".replace(".", ",").replace("-", "−")
+        item["how"] = explain.how(
+            explain.OUTLIER,
+            int(row["n_students"]),
+            int(row["n"]),
+            [explain.check(f"{item['class']}, «{item['topic']}»", None, "робастный z", item["robust_z"],
+                           f"{difference} балла от ожидаемого")],
+        )
         outliers.append(item)
     outliers.sort(key=lambda item: -abs(item["robust_z"]))
 

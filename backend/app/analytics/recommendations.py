@@ -5,9 +5,12 @@ import math
 import pandas as pd
 from scipy.optimize import linprog
 
+from app.analytics import how as explain
 from app.analytics.difficulty import HARD_FROM, topic_difficulty
 from app.analytics.prerequisites import ROOT_LEVELS, dependents_phrase, plural, root_dependents, topic_prerequisites
 from app.analytics.textbooks import MIN_STUDENTS, adjust_for_school
+
+LEVEL_WORDS = {"hard": "сложная", "medium": "средняя", "easy": "лёгкая"}
 
 # Корень проблемы: тема → названия тем, которые от неё зависят.
 Roots = dict[int, list[str]]
@@ -196,6 +199,13 @@ def build_response(topics: list[dict], deltas: dict[int, int], roots: Roots | No
                 "hours_recommended": topic["hours_planned"] + deltas[topic["topic_id"]],
                 "delta": deltas[topic["topic_id"]],
                 "reason": build_reason(topic, deltas[topic["topic_id"]], roots),
+                "how": explain.how(
+                    explain.HOURS,
+                    topic.get("how", {}).get("n_students"),
+                    topic.get("how", {}).get("n_results"),
+                    [explain.check("Сложность темы", effect_name="индекс",
+                                   effect_size=topic["difficulty_index"], effect_label=LEVEL_WORDS[topic["level"]])],
+                ),
             }
             for topic in topics
         ],

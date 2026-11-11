@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from app.analytics import how as explain
+
 ALPHA = 0.05
 MIN_STUDENTS = 30
 BOOTSTRAP_REPEATS = 2000
@@ -135,6 +137,11 @@ def confounding_note(textbooks: list[dict], comparisons: list[dict]) -> str | No
     )
 
 
+def round_p(p_value: float) -> float:
+    """Три значащие цифры: очень малое p остаётся видимым (2,1e-08), а не превращается в 0."""
+    return float(f"{p_value:.3g}")
+
+
 def format_p(p_value: float) -> str:
     # Неразрывные пробелы: при переносе строки «p < 0,001» не должно разрываться.
     if p_value < 0.001:
@@ -220,11 +227,11 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
     note = confounding_note(textbooks, comparisons)
 
     for pair in tested:
-        pair["p_value"] = round(pair["p_value"], 4)
-        pair["p_adjusted"] = round(pair["p_adjusted"], 4)
+        pair["p_value"] = round_p(pair["p_value"])
+        pair["p_adjusted"] = round_p(pair["p_adjusted"])
         pair["cohens_d"] = round(pair["cohens_d"], 2)
-        pair["mann_whitney_p"] = round(pair["mann_whitney_p"], 4)
-        pair["mann_whitney_p_adjusted"] = round(pair["mann_whitney_p_adjusted"], 4)
+        pair["mann_whitney_p"] = round_p(pair["mann_whitney_p"])
+        pair["mann_whitney_p_adjusted"] = round_p(pair["mann_whitney_p_adjusted"])
         pair["ci_low"] = round(pair["ci_low"], 3)
         pair["ci_high"] = round(pair["ci_high"], 3)
 
@@ -236,4 +243,13 @@ def compare_textbooks(results: pd.DataFrame, topic_id: int | None = None) -> dic
         "conclusion": conclusion,
         "confounding_note": note,
         "limitation": LIMITATION,
+        "how": explain.how(
+            explain.COMPARISON,
+            len(students),
+            len(scope),
+            [
+                explain.check(f"{pair['a']} и {pair['b']}", pair["p_adjusted"], "d Коэна", pair["cohens_d"], pair["effect"])
+                for pair in comparisons
+            ],
+        ),
     }

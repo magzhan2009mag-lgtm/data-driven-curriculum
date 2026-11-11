@@ -2,6 +2,31 @@ export const API_URL = process.env.API_URL ?? "http://127.0.0.1:8000";
 
 export type Level = "hard" | "medium" | "easy";
 
+/** «Как посчитано»: метод одной фразой, объём данных, p-value и размер эффекта — всё с бэкенда. */
+export type How = {
+  method: string;
+  n_students: number | null;
+  n_results: number | null;
+  tests: {
+    label: string;
+    p_value: number | null;
+    effect_name: string | null;
+    effect_size: number | null;
+    effect_label: string | null;
+  }[];
+};
+
+export type Stats = {
+  n_results: number;
+  n_item_responses: number;
+  n_students: number;
+  n_classes: number;
+  n_schools: number;
+  n_topics: number;
+  archive_from: number | null;
+  archive_to: number | null;
+};
+
 export type School = { school_id: number; school: string; n_classes: number; n_students: number };
 
 /** Поля, которые API добавляет при выбранной школе: те же показатели по всем школам для сравнения. */
@@ -17,6 +42,7 @@ export type TopicDifficulty = {
   level: Level;
   by_school: { school_id: number; school: string; avg_score: number }[];
   score_distribution: { range: string; count: number; failing: boolean }[];
+  how: How;
   avg_score_all?: number;
   fail_rate_all?: number;
   difficulty_index_all?: number;
@@ -49,6 +75,7 @@ export type Comparison = {
   confounding_note: string | null;
   limitation: string;
   school_note: string | null;
+  how: How;
 };
 
 /** Строка плана учебника. В одной школе у учебника с малым числом учеников чисел нет (null). */
@@ -75,6 +102,7 @@ export type Recommendations = {
     delta: number;
     reason: string;
     by_textbook: TextbookHours[];
+    how: How;
     delta_all?: number;
     hours_recommended_all?: number;
   }[];
@@ -131,6 +159,7 @@ export type Outliers = ScopeNote & {
     expected_score: number;
     difference: number;
     text: string;
+    how: How;
   }[];
   conclusion: string;
 };
@@ -157,6 +186,7 @@ export type Prerequisites = ScopeNote & {
     level: Level;
     dependents: { topic_id: number; topic: string; level: Level }[];
     text: string;
+    how: How;
   }[];
   n_students: number;
   conclusion: string;
@@ -195,6 +225,7 @@ export type Decisions = {
     text: string;
     advice: string | null;
     short_advice: string | null;
+    how: How;
   }[];
 };
 
@@ -227,6 +258,10 @@ function apiPath(path: string, params: Record<string, number | undefined>): stri
   }
   const query = search.toString();
   return query ? `${path}?${query}` : path;
+}
+
+export function getStats(school?: number): Promise<Stats | null> {
+  return request<Stats>(apiPath("/stats", { school_id: school }));
 }
 
 export async function getSchools(): Promise<School[]> {

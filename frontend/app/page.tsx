@@ -1,24 +1,26 @@
 import Link from "next/link";
 import { AllSchools } from "@/components/all-schools";
+import { DataVolume } from "@/components/data-volume";
 import { EmptyState } from "@/components/empty-state";
 import { OutlierNotice } from "@/components/outlier-notice";
 import { RootCauses } from "@/components/root-causes";
 import { ScoreHeatmap } from "@/components/score-heatmap";
 import { SummaryCards } from "@/components/summary-cards";
 import { TrendsList } from "@/components/trends-list";
-import { getOutliers, getPrerequisites, getSummary, getTopics, getTrends } from "@/lib/api";
+import { getOutliers, getPrerequisites, getStats, getSummary, getTopics, getTrends } from "@/lib/api";
 import { formatPercent, formatScore } from "@/lib/format";
 import { inSchool, schoolHref } from "@/lib/school";
 import { readScope } from "@/lib/scope";
 
 export default async function HomePage({ searchParams }: PageProps<"/">) {
   const { school, selected } = await readScope(searchParams);
-  const [topics, trends, outliers, prerequisites, summary] = await Promise.all([
+  const [topics, trends, outliers, prerequisites, summary, stats] = await Promise.all([
     getTopics(school),
     getTrends(school),
     getOutliers(school),
     getPrerequisites(school),
     getSummary(school),
+    getStats(school),
   ]);
   if (topics.length === 0) return <EmptyState />;
 
@@ -31,6 +33,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         <h1 className="max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
           {selected ? `${selected.school}: сложнее` : "Сложнее"} всего усваивается тема «{hardest.topic}»
         </h1>
+        <DataVolume stats={stats} />
         <div className="mt-8">
           <SummaryCards cards={summary} school={school} />
         </div>

@@ -29,7 +29,7 @@ def test_difficulty_format(topics):
     assert len(topics) == 12
     assert set(topics[0]) == {
         "topic_id", "topic", "hours_planned", "avg_score", "median_score", "std_score", "fail_rate",
-        "difficulty_index", "difficulty_z", "is_anomalous", "level", "by_school", "score_distribution",
+        "difficulty_index", "difficulty_z", "is_anomalous", "level", "by_school", "score_distribution", "how",
     }
     assert set(topics[0]["by_school"][0]) == {"school_id", "school", "avg_score"}
     assert len(topics[0]["by_school"]) == 5
@@ -76,7 +76,7 @@ def test_recommendations_keep_total_hours(client):
     assert body["total_hours"] == 84
     assert sum(item["hours_recommended"] for item in body["items"]) == 84
     assert set(body["items"][0]) == {
-        "topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason", "by_textbook",
+        "topic_id", "topic", "level", "hours_current", "hours_recommended", "delta", "reason", "by_textbook", "how",
     }
     assert len(body["textbook_plans"]) == 3
 

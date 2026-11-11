@@ -129,7 +129,7 @@ def test_api_format(client):
         "from_topic_id", "from_topic", "to_topic_id", "to_topic", "coef", "std_coef", "p_value", "p_adjusted",
         "points", "text",
     }
-    assert set(body["roots"][0]) == {"topic_id", "topic", "level", "dependents", "text"}
+    assert set(body["roots"][0]) == {"topic_id", "topic", "level", "dependents", "text", "how"}
     assert set(body["roots"][0]["dependents"][0]) == {"topic_id", "topic", "level"}
     assert body["n_students"] > 500
     assert body["conclusion"] == "Найдено связей между темами: 3. Корни проблемы: «Дроби» и «Отрицательные числа»."

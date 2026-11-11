@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { HowCalculated } from "@/components/how-calculated";
 import type { Decisions } from "@/lib/api";
 import { schoolHref } from "@/lib/school";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function TextbookDecisions({ data, school, titleId }: { data: Decisions; 
                     </Link>
                   </p>
                 )}
+                <HowCalculated how={item.how} className="mt-2" />
               </div>
             </li>
           );

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AllSchools } from "@/components/all-schools";
+import { HowCalculated } from "@/components/how-calculated";
 import { ItemIssues } from "@/components/item-issues";
 import { LevelMark } from "@/components/level-mark";
 import { ScoreDistribution } from "@/components/score-distribution";
@@ -86,6 +87,7 @@ export default async function TopicPage({ params, searchParams }: PageProps<"/to
             </div>
           </dl>
         </div>
+        <HowCalculated how={topic.how} className="mt-4" />
       </section>
 
       {recommendation && (

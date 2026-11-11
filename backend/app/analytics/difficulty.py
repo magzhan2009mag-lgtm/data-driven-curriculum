@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from app.analytics import how as explain
+
 FAIL_THRESHOLD = 50
 HARD_FROM = 0.40
 MEDIUM_FROM = 0.25
@@ -72,6 +74,7 @@ def topic_difficulty(results: pd.DataFrame) -> list[dict]:
                     for (school_id, school), score in by_school.items()
                 ],
                 "score_distribution": score_distribution(group["score"]),
+                "how": explain.how(explain.DIFFICULTY, int(group["student_id"].nunique()), len(group)),
             }
         )
     add_anomaly_flags(items)

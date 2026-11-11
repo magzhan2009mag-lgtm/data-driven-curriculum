@@ -5,10 +5,11 @@ from fastapi import Depends, FastAPI, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.analytics.clusters import cluster_schools, cluster_topics
+from app.analytics.data import count_item_responses, load_item_responses, load_results, load_students, load_year_stats
 from app.analytics.decisions import textbook_decisions
-from app.analytics.data import load_item_responses, load_results, load_students, load_year_stats
 from app.analytics.difficulty import topic_difficulty
 from app.analytics.explain import explain_recommendations
+from app.analytics.export import content_disposition, csv_filename, hours_csv
 from app.analytics.hours_effect import hours_effect
 from app.analytics.items import item_quality
 from app.analytics.matching import match_textbooks
@@ -31,7 +32,7 @@ from app.analytics.schools import (
     outliers_for_school,
     school_note,
 )
-from app.analytics.export import content_disposition, csv_filename, hours_csv
+from app.analytics.stats import data_stats
 from app.analytics.summary import build_summary
 from app.analytics.textbooks import MIN_STUDENTS, compare_textbooks
 from app.analytics.trends import topic_trends
@@ -93,6 +94,15 @@ def decisions_for(scope: Scope, comparison: dict | None = None) -> dict:
             note = f"{in_school(scope.school)} у учебников мало учеников, поэтому решение по всем школам."
             return textbook_decisions(scope.all_results, all_schools=True, note=note)
     return textbook_decisions(scope.results)
+
+
+@app.get("/stats")
+def get_stats(scope: Scope = Depends(get_scope), db: Session = Depends(get_db)) -> dict:
+    """Сколько данных проанализировано: результаты тестов, ответы на задания, ученики, классы, школы, архив."""
+    year_stats = load_year_stats(db)
+    if scope.filtered:
+        year_stats = year_stats[year_stats["school_id"] == scope.school_id]
+    return data_stats(scope.results, count_item_responses(db, scope.school_id), year_stats)
 
 
 @app.get("/schools")

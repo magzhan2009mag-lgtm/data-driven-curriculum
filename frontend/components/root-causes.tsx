@@ -1,3 +1,4 @@
+import { HowCalculated } from "@/components/how-calculated";
 import { PrerequisiteMap } from "@/components/prerequisite-map";
 import { Term } from "@/components/term";
 import type { Prerequisites } from "@/lib/api";
@@ -19,7 +20,10 @@ export function RootCauses({ data, school }: { data: Prerequisites | null; schoo
           {data.roots.length > 0 && (
             <ul className="mt-3 max-w-prose space-y-2 text-lg leading-snug">
               {data.roots.map((root) => (
-                <li key={root.topic_id}>{root.text}</li>
+                <li key={root.topic_id}>
+                  {root.text}
+                  <HowCalculated how={root.how} className="mt-1 text-sm" />
+                </li>
               ))}
             </ul>
           )}

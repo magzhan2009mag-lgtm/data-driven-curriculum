@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
+import { HowCalculated } from "@/components/how-calculated";
 import { Term } from "@/components/term";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TextbookDecisions } from "@/components/textbook-decisions";
@@ -71,6 +72,7 @@ export default async function TextbooksPage({ searchParams }: PageProps<"/textbo
         ) : (
           <p className="mt-3 max-w-prose text-lg">{comparison.conclusion}</p>
         )}
+        <HowCalculated how={comparison.how} className="mt-3" />
       </section>
 
       {comparison.confounding_note && (

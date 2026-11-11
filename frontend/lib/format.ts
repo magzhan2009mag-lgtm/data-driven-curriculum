@@ -45,3 +45,10 @@ export const SCORE_BANDS = [
 export function scoreBandClass(score: number): string {
   return SCORE_BANDS.findLast((band) => score >= band.from)!.className;
 }
+
+/** Число со словом в нужной форме: pluralize(22, ["класс", "класса", "классов"]) → «22 класса». */
+export function pluralize(count: number, [one, few, many]: [string, string, string]): string {
+  const form = plural.select(count);
+  const word = form === "one" ? one : form === "few" ? few : many;
+  return `${new Intl.NumberFormat(LOCALE).format(count)} ${word}`;
+}

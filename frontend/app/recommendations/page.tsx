@@ -5,6 +5,7 @@ import { AiExplanations, AiExplanationsSkeleton } from "@/components/ai-explanat
 import { AllSchools } from "@/components/all-schools";
 import { EmptyState } from "@/components/empty-state";
 import { HoursMatrix } from "@/components/hours-matrix";
+import { HowCalculated } from "@/components/how-calculated";
 import { LevelMark } from "@/components/level-mark";
 import { Term } from "@/components/term";
 import { buttonVariants } from "@/components/ui/button";
@@ -96,6 +97,7 @@ function Group({ title, items, school }: { title: string; items: Item[]; school?
                     .
                   </p>
                 )}
+                <HowCalculated how={item.how} className="mt-1" />
               </div>
             </li>
           );
